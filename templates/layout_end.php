@@ -3,84 +3,74 @@
 </div>
 
 <script>
-// ─── SIDEBAR TOGGLE (mobile) ─────────────────────────────
+// Sidebar toggle (mobile)
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
 }
 
+// User menu
 function toggleUserMenu() {
   const m = document.getElementById('userMenu');
   m.style.display = m.style.display === 'none' ? 'block' : 'none';
 }
 
-// Show menu toggle on mobile
+// Show hamburger on mobile
 function checkMobile() {
-  const toggle = document.getElementById('menuToggle');
-  if (window.innerWidth <= 1024) {
-    toggle.style.display = 'flex';
-  } else {
-    toggle.style.display = 'none';
+  const btn = document.getElementById('menuToggle');
+  if (!btn) return;
+  btn.style.display = window.innerWidth <= 1024 ? 'flex' : 'none';
+  if (window.innerWidth > 1024) {
     document.getElementById('sidebar').classList.remove('open');
   }
 }
 checkMobile();
 window.addEventListener('resize', checkMobile);
 
-// Close sidebar when clicking outside (mobile)
+// Close sidebar on outside click (mobile)
 document.addEventListener('click', function(e) {
-  const sidebar = document.getElementById('sidebar');
-  const toggle  = document.getElementById('menuToggle');
-  if (window.innerWidth <= 1024 && !sidebar.contains(e.target) && e.target !== toggle) {
-    sidebar.classList.remove('open');
+  const sb = document.getElementById('sidebar');
+  const mb = document.getElementById('menuToggle');
+  if (window.innerWidth <= 1024 && sb && !sb.contains(e.target) && e.target !== mb) {
+    sb.classList.remove('open');
   }
 });
 
-// ─── AUTO DISMISS FLASH ───────────────────────────────────
+// Auto-dismiss flash messages after 4s
 document.querySelectorAll('.flash-msg').forEach(function(el) {
   setTimeout(function() {
-    el.style.opacity = '0';
-    el.style.transform = 'translateX(100%)';
     el.style.transition = 'all 0.3s ease';
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(110%)';
     setTimeout(function() { el.remove(); }, 300);
   }, 4000);
 });
 
-// ─── CSRF HEADER FOR AJAX ────────────────────────────────
-const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+// Global CSRF token for AJAX
+const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
-// ─── MODAL HELPERS ───────────────────────────────────────
+// Modal helpers
 function openModal(id) {
-  document.getElementById(id).classList.add('open');
-  document.body.style.overflow = 'hidden';
+  const el = document.getElementById(id);
+  if (el) { el.classList.add('open'); document.body.style.overflow = 'hidden'; }
 }
-
 function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
-  document.body.style.overflow = '';
+  const el = document.getElementById(id);
+  if (el) { el.classList.remove('open'); document.body.style.overflow = ''; }
 }
 
-// Close modal on backdrop click
-document.querySelectorAll('.modal-backdrop').forEach(function(backdrop) {
-  backdrop.addEventListener('click', function(e) {
-    if (e.target === backdrop) closeModal(backdrop.id);
+document.querySelectorAll('.modal-backdrop').forEach(function(b) {
+  b.addEventListener('click', function(e) {
+    if (e.target === b) closeModal(b.id);
   });
 });
 
-// ─── CONFIRM DIALOG ──────────────────────────────────────
-function confirmAction(message, callback) {
-  if (confirm(message)) callback();
-}
-
-// ─── SEARCH DEBOUNCE ─────────────────────────────────────
-function debounce(fn, delay) {
+// Debounce utility
+function debounce(fn, ms) {
   let t;
-  return function(...args) {
-    clearTimeout(t);
-    t = setTimeout(() => fn.apply(this, args), delay);
-  };
+  return function(...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this, a), ms); };
 }
 </script>
 
-<?php if (isset($extraScripts)) echo $extraScripts; ?>
+<?php if (!empty($extraScripts)) echo $extraScripts; ?>
 </body>
 </html>
