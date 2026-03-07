@@ -27,9 +27,17 @@ if (!$exam) { flash('error','Exam not found.'); redirect('/educore/dashboard.php
 // Validate exam is accessible
 if ($exam['status']==='draft') { flash('error','This exam is not yet available.'); redirect('/educore/dashboard.php'); }
 if ($exam['status']==='archived') { flash('error','This exam is archived.'); redirect('/educore/dashboard.php'); }
+// Auto-sync status from time-based rules before access check
+if ($exam['status']==='scheduled' && $exam['starts_at'] && strtotime($exam['starts_at']) <= time()) {
+    $pdo->prepare("UPDATE exams SET status='active' WHERE id=?")->execute([$eid]);
+    $exam['status'] = 'active';
+}
+if ($exam['status']==='active' && $exam['ends_at'] && strtotime($exam['ends_at']) < time()) {
+    $pdo->prepare("UPDATE exams SET status='closed' WHERE id=?")->execute([$eid]);
+    $exam['status'] = 'closed';
+}
 if ($exam['status']==='closed') { redirect("result.php?exam=$eid&student={$student['id']}"); }
 if ($exam['starts_at'] && strtotime($exam['starts_at']) > time()) { flash('error','This exam has not started yet.'); redirect('/educore/dashboard.php'); }
-if ($exam['ends_at']   && strtotime($exam['ends_at'])   < time()) { flash('error','This exam has ended.'); redirect('/educore/dashboard.php'); }
 
 // Check group enrollment if exam has a group
 if ($exam['group_id']) {

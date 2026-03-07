@@ -31,6 +31,20 @@ $examStmt = $pdo->prepare("
 $examStmt->execute([$student['id'],$cid,$student['id']]);
 $exams = $examStmt->fetchAll();
 
+// Auto-update exam statuses so student always sees real-time state
+// (same logic as index.php — fixes "exam is live but shows Closed" bug)
+foreach ($exams as &$ex) {
+    if ($ex['status']==='scheduled' && $ex['starts_at'] && strtotime($ex['starts_at']) <= time()) {
+        $pdo->prepare("UPDATE exams SET status='active' WHERE id=?")->execute([$ex['id']]);
+        $ex['status'] = 'active';
+    }
+    if ($ex['status']==='active' && $ex['ends_at'] && strtotime($ex['ends_at']) < time()) {
+        $pdo->prepare("UPDATE exams SET status='closed', ends_at=COALESCE(ends_at,NOW()) WHERE id=?")->execute([$ex['id']]);
+        $ex['status'] = 'closed';
+    }
+}
+unset($ex);
+
 include __DIR__ . '/../../templates/layout.php';
 ?>
 

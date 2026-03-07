@@ -58,11 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $chk->execute([$code]);
             } while ($chk->fetch());
 
-            $expires = date('Y-m-d H:i:s', time() + ($duration * 60));
-
+            // Use MySQL NOW()+INTERVAL so expiry timezone matches the NOW()
+            // check in submit.php — fixes "code always invalid" bug.
             $pdo->prepare("INSERT INTO attendance_sessions (center_id, group_id, teacher_id, session_code, code_expires_at, session_date, topic, status)
-                            VALUES (?,?,?,?,?,CURDATE(),?,'open')")
-                ->execute([$cid, $groupId, $uid, $code, $expires, $topic]);
+                            VALUES (?,?,?,?, NOW() + INTERVAL ? MINUTE, CURDATE(),?,'open')")
+                ->execute([$cid, $groupId, $uid, $code, $duration, $topic]);
             $sessionId = $pdo->lastInsertId();
 
             auditLog('attendance.session_started', 'attendance_session', $sessionId, [
@@ -91,9 +91,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $chk  = $pdo->prepare("SELECT id FROM attendance_sessions WHERE session_code=? AND code_expires_at > NOW() AND id != ?");
             $chk->execute([$code, $sessionId]);
         } while ($chk->fetch());
-        $expires = date('Y-m-d H:i:s', time() + ($duration * 60));
-        $pdo->prepare("UPDATE attendance_sessions SET session_code=?, code_expires_at=? WHERE id=? AND center_id=?")
-            ->execute([$code, $expires, $sessionId, $cid]);
+        $pdo->prepare("UPDATE attendance_sessions SET session_code=?, code_expires_at=NOW() + INTERVAL ? MINUTE WHERE id=? AND center_id=?")
+            ->execute([$code, $duration, $sessionId, $cid]);
         auditLog('attendance.code_regenerated', 'attendance_session', $sessionId);
         flash('success', 'New code generated.');
         redirect("create.php?session=$sessionId");

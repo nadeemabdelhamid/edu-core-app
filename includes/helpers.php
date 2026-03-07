@@ -69,7 +69,9 @@ function requireRole(...$roles) {
 }
 
 function login($user) {
-    session_regenerate_id(true);
+    // Use false so the old session file is NOT deleted — allows multiple
+    // users to be logged in concurrently on different browsers/devices.
+    session_regenerate_id(false);
     $_SESSION['user'] = $user;
     // Update last login
     $pdo = getDB();

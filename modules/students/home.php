@@ -47,6 +47,21 @@ $examStmt = $pdo->prepare("
 $examStmt->execute([$student['id'], $cid, $student['id']]);
 $activeExams = $examStmt->fetchAll();
 
+// Auto-update exam statuses (fixes "exam is live but shows Closed" bug)
+foreach ($activeExams as &$ex) {
+    if ($ex['status']==='scheduled' && $ex['starts_at'] && strtotime($ex['starts_at']) <= time()) {
+        $pdo->prepare("UPDATE exams SET status='active' WHERE id=?")->execute([$ex['id']]);
+        $ex['status'] = 'active';
+    }
+    if ($ex['status']==='active' && $ex['ends_at'] && strtotime($ex['ends_at']) < time()) {
+        $pdo->prepare("UPDATE exams SET status='closed' WHERE id=?")->execute([$ex['id']]);
+        $ex['status'] = 'closed';
+    }
+}
+unset($ex);
+// Re-filter: only keep exams that are still active after status sync
+$activeExams = array_values(array_filter($activeExams, fn($e) => $e['status'] === 'active'));
+
 $openStmt = $pdo->prepare("
     SELECT s.*, g.name AS group_name
     FROM attendance_sessions s
