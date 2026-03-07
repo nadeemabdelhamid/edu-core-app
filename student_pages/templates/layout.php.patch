@@ -1,9 +1,0 @@
---- INSTRUCTIONS ---
-In templates/layout.php, find the line:
-  if ($user['role'] === 'super_admin') {
-
-REPLACE the entire navItems block (lines 20-44) with the content below.
-The block starts at:
-  $navItems = [
-and ends just before:
-  // Super admin gets extra items
