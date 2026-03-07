@@ -6,22 +6,28 @@ $pdo = getDB();
 $uid = authId();
 $cid = centerId();
 
-$pageTitle  = 'Submit Attendance';
+$pageTitle  = 'Mark Attendance';
 $activePage = 'attendance';
+$breadcrumbs = [
+    ['label' => 'Dashboard', 'href' => '/educore/dashboard.php'],
+    ['label' => 'Attendance'],
+];
 
-$errors  = [];
-$success = false;
-
-// Get student record
-$stStmt = $pdo->prepare("SELECT * FROM students WHERE user_id = ? AND center_id = ?");
+// Get student record linked to this user
+$stStmt = $pdo->prepare("SELECT * FROM students WHERE user_id = ? AND center_id = ? AND is_active = 1");
 $stStmt->execute([$uid, $cid]);
 $student = $stStmt->fetch();
 
 if (!$student) {
-    flash('error', 'Student profile not found.');
+    flash('error', 'Student profile not found. Please contact your teacher.');
     redirect('/educore/dashboard.php');
 }
 
+$errors  = [];
+$success = false;
+$successSession = null;
+
+// ── Handle submission ──────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $code = strtoupper(trim($_POST['code'] ?? ''));
@@ -29,43 +35,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$code) {
         $errors[] = 'Please enter the attendance code.';
     } elseif (!preg_match('/^[A-Z0-9]{6}$/', $code)) {
-        $errors[] = 'Invalid code format.';
+        $errors[] = 'Code must be exactly 6 characters (letters and numbers only).';
     } else {
-        // Find open session with matching code
-        $sessStmt = $pdo->prepare("SELECT * FROM attendance_sessions WHERE session_code=? AND center_id=? AND status='open' AND code_expires_at > NOW()");
+        // Find open session with matching code, scoped to center
+        $sessStmt = $pdo->prepare("
+            SELECT s.*, g.name AS group_name, g.subject
+            FROM attendance_sessions s
+            JOIN `groups` g ON g.id = s.group_id
+            WHERE s.session_code = ? AND s.center_id = ? AND s.status = 'open' AND s.code_expires_at > NOW()");
         $sessStmt->execute([$code, $cid]);
         $session = $sessStmt->fetch();
 
         if (!$session) {
             $errors[] = 'Code is invalid or has expired. Ask your teacher for the current code.';
         } else {
-            // Check student is in this group
+            // Verify student is enrolled in this group
             $enrollStmt = $pdo->prepare("SELECT id FROM group_students WHERE group_id=? AND student_id=? AND status='active'");
             $enrollStmt->execute([$session['group_id'], $student['id']]);
             if (!$enrollStmt->fetch()) {
-                $errors[] = 'You are not enrolled in this group.';
+                $errors[] = 'You are not enrolled in this group. Contact your teacher if this is incorrect.';
             } else {
-                // Check duplicate submission
+                // Check for duplicate submission
                 $dupStmt = $pdo->prepare("SELECT id FROM attendance_records WHERE session_id=? AND student_id=?");
                 $dupStmt->execute([$session['id'], $student['id']]);
                 if ($dupStmt->fetch()) {
                     $errors[] = 'You have already submitted attendance for this session.';
                 } else {
-                    // Record attendance
+                    // ✅ Record attendance
                     $pdo->prepare("INSERT INTO attendance_records (session_id, student_id, center_id, status, submitted_at, ip_address) VALUES (?,?,?,'present',NOW(),?)")
                         ->execute([$session['id'], $student['id'], $cid, $_SERVER['REMOTE_ADDR'] ?? null]);
+
                     $success = true;
-                    auditLog('attendance.submitted', 'attendance_record', null, ['session_id' => $session['id']]);
+                    $successSession = $session;
+                    auditLog('attendance.submitted', 'attendance_record', $session['id'], [
+                        'student_id' => $student['id'],
+                        'group'      => $session['group_name'],
+                    ]);
                 }
             }
         }
     }
 }
 
+// ── Load student's attendance history ─────────────────────
+$histStmt = $pdo->prepare("
+    SELECT ar.status, ar.submitted_at, g.name AS group_name, a.topic, a.session_date
+    FROM attendance_records ar
+    JOIN attendance_sessions a ON a.id = ar.session_id
+    JOIN `groups` g ON g.id = a.group_id
+    WHERE ar.student_id = ? AND ar.center_id = ?
+    ORDER BY a.session_date DESC, ar.submitted_at DESC
+    LIMIT 10");
+$histStmt->execute([$student['id'], $cid]);
+$history = $histStmt->fetchAll();
+
+// ── Per-group attendance rate ─────────────────────────────
+$rateStmt = $pdo->prepare("
+    SELECT g.name AS group_name,
+           COUNT(s.id) AS total,
+           SUM(CASE WHEN ar.status IN ('present','late') THEN 1 ELSE 0 END) AS present_count,
+           ROUND(100.0 * SUM(CASE WHEN ar.status IN ('present','late') THEN 1 ELSE 0 END) / NULLIF(COUNT(s.id),0), 1) AS rate
+    FROM group_students gs
+    JOIN `groups` g ON g.id = gs.group_id
+    JOIN attendance_sessions s ON s.group_id = gs.group_id AND s.center_id = ? AND s.status = 'closed'
+    LEFT JOIN attendance_records ar ON ar.session_id = s.id AND ar.student_id = gs.student_id
+    WHERE gs.student_id = ? AND gs.status = 'active'
+    GROUP BY g.id
+    ORDER BY g.name");
+$rateStmt->execute([$cid, $student['id']]);
+$groupRates = $rateStmt->fetchAll();
+
+$statusBadge = ['present'=>'badge-success','absent'=>'badge-danger','late'=>'badge-warning','excused'=>'badge-info'];
+
 include __DIR__ . '/../../templates/layout.php';
 ?>
 
-<div style="max-width:460px; margin:0 auto;">
+<div style="max-width:540px; margin:0 auto;">
   <div class="page-header">
     <div>
       <h1 class="page-title">Mark Attendance</h1>
@@ -73,65 +118,101 @@ include __DIR__ . '/../../templates/layout.php';
     </div>
   </div>
 
-  <?php if ($success): ?>
-  <div class="card">
+  <?php if ($success && $successSession): ?>
+  <!-- ── Success state ───────────────────────────────────── -->
+  <div class="card" style="border-color:rgba(34,197,94,0.3);">
     <div class="card-body" style="text-align:center; padding:50px 30px;">
-      <div style="width:64px; height:64px; background:var(--success-dim); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:28px;">✅</div>
-      <div style="font-family:var(--font-display); font-size:1.4rem; font-weight:700; color:var(--success); margin-bottom:8px;">Attendance Recorded!</div>
-      <div style="font-size:0.85rem; color:var(--text-muted);">Your attendance has been successfully submitted.</div>
-      <button onclick="location.reload()" class="btn btn-ghost" style="margin-top:20px;">Submit Another</button>
+      <div style="width:72px; height:72px; background:rgba(34,197,94,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:32px;">✅</div>
+      <div style="font-family:var(--font-display); font-size:1.5rem; font-weight:800; color:var(--success); margin-bottom:8px;">Attendance Recorded!</div>
+      <div style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:20px;">
+        <strong><?= sanitize($successSession['group_name']) ?></strong>
+        <?php if ($successSession['topic']): ?>— <?= sanitize($successSession['topic']) ?><?php endif; ?>
+        <br>
+        <span style="color:var(--text-muted); font-size:0.8rem;"><?= date('l, M j, Y · H:i') ?></span>
+      </div>
+      <a href="submit.php" class="btn btn-ghost" style="margin-top:4px;">← Mark Another</a>
     </div>
   </div>
-  <?php else: ?>
 
+  <?php else: ?>
+  <!-- ── Error display ──────────────────────────────────── -->
   <?php if ($errors): ?>
-  <div style="background:var(--danger-dim); border:1px solid rgba(239,68,68,0.25); border-radius:var(--radius-md); padding:14px 18px; font-size:0.84rem; color:var(--danger); margin-bottom:20px;">
+  <div style="background:var(--danger-dim); border:1px solid rgba(239,68,68,0.25); border-radius:var(--radius-md); padding:14px 18px; font-size:0.85rem; color:var(--danger); margin-bottom:20px;">
     <?php foreach ($errors as $e): ?><div>• <?= sanitize($e) ?></div><?php endforeach; ?>
   </div>
   <?php endif; ?>
 
+  <!-- ── Code input form ─────────────────────────────────── -->
   <div class="card">
     <div class="card-header"><span class="card-title">Enter Attendance Code</span></div>
     <div class="card-body">
-      <form method="POST" action="">
+      <form method="POST" autocomplete="off">
         <?= csrf_field() ?>
 
         <div class="form-group" style="margin-bottom:24px;">
-          <label class="form-label required">6-Character Code</label>
-          <input type="text" name="code" class="form-control"
-                 placeholder="e.g. AB3X7K"
+          <input type="text" name="code" id="codeInput"
+                 class="form-control"
+                 placeholder="XXXXXX"
                  maxlength="6"
-                 autocomplete="off"
-                 style="text-align:center; font-family:var(--font-display); font-size:2rem; font-weight:700; letter-spacing:0.3em; text-transform:uppercase; padding:16px;"
-                 oninput="this.value=this.value.toUpperCase()"
-                 autofocus required>
-          <span class="form-hint" style="text-align:center; display:block;">Ask your teacher for today's session code</span>
+                 style="text-align:center; font-family:var(--font-display); font-size:2.5rem; font-weight:800; letter-spacing:0.4em; text-transform:uppercase; padding:20px; border-width:2px;"
+                 oninput="formatCode(this)"
+                 autofocus
+                 required>
+          <div style="text-align:center; margin-top:8px; font-size:0.78rem; color:var(--text-muted);">
+            Ask your teacher for today's session code
+          </div>
         </div>
 
-        <button type="submit" class="btn btn-primary btn-lg w-full">Submit Attendance</button>
+        <button type="submit" class="btn btn-primary btn-lg w-full" id="submitBtn">
+          Submit Attendance
+        </button>
       </form>
     </div>
   </div>
 
-  <!-- Recent attendance -->
-  <?php
-  $recentStmt = $pdo->prepare("SELECT ar.submitted_at, g.name as group_name, a.topic FROM attendance_records ar JOIN attendance_sessions a ON a.id=ar.session_id JOIN `groups` g ON g.id=a.group_id WHERE ar.student_id=? ORDER BY ar.submitted_at DESC LIMIT 5");
-  $recentStmt->execute([$student['id']]);
-  $recentAttendance = $recentStmt->fetchAll();
-  ?>
+  <?php endif; ?>
 
-  <?php if ($recentAttendance): ?>
+  <!-- ── My group attendance rates ──────────────────────── -->
+  <?php if ($groupRates): ?>
   <div class="card" style="margin-top:20px;">
-    <div class="card-header"><span class="card-title">My Recent Attendance</span></div>
+    <div class="card-header"><span class="card-title">My Attendance by Group</span></div>
+    <div class="card-body no-padding">
+      <?php foreach ($groupRates as $gr): ?>
+      <?php
+        $rate = (float)$gr['rate'];
+        $color = $rate >= 80 ? 'var(--success)' : ($rate >= 60 ? 'var(--warning)' : 'var(--danger)');
+      ?>
+      <div style="display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--border);">
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:500; color:var(--text-primary); font-size:0.85rem;"><?= sanitize($gr['group_name']) ?></div>
+          <div style="font-size:0.72rem; color:var(--text-muted);"><?= $gr['present_count'] ?> / <?= $gr['total'] ?> sessions</div>
+        </div>
+        <div style="width:80px;">
+          <div style="height:4px; background:var(--bg-elevated); border-radius:2px; overflow:hidden; margin-bottom:4px;">
+            <div style="height:100%; width:<?= $rate ?>%; background:<?= $color ?>; border-radius:2px;"></div>
+          </div>
+          <div style="font-size:0.78rem; font-weight:600; color:<?= $color ?>; text-align:right;"><?= $rate ?>%</div>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+  <?php endif; ?>
+
+  <!-- ── Recent history ─────────────────────────────────── -->
+  <?php if ($history): ?>
+  <div class="card" style="margin-top:20px;">
+    <div class="card-header"><span class="card-title">Recent Attendance</span></div>
     <div class="card-body no-padding">
       <table class="data-table">
-        <thead><tr><th>Group</th><th>Topic</th><th>Date</th></tr></thead>
+        <thead><tr><th>Date</th><th>Group</th><th>Topic</th><th>Status</th></tr></thead>
         <tbody>
-          <?php foreach ($recentAttendance as $rec): ?>
+          <?php foreach ($history as $rec): ?>
           <tr>
-            <td class="cell-primary"><?= sanitize($rec['group_name']) ?></td>
-            <td><?= sanitize($rec['topic'] ?: '—') ?></td>
-            <td style="font-size:0.78rem;"><?= date('M j, H:i', strtotime($rec['submitted_at'])) ?></td>
+            <td style="font-size:0.78rem; color:var(--text-muted);"><?= date('M j', strtotime($rec['session_date'])) ?></td>
+            <td class="cell-primary" style="font-size:0.84rem;"><?= sanitize($rec['group_name']) ?></td>
+            <td style="font-size:0.78rem; color:var(--text-muted);"><?= sanitize($rec['topic'] ?: '—') ?></td>
+            <td><span class="badge <?= $statusBadge[$rec['status']] ?>"><?= ucfirst($rec['status']) ?></span></td>
           </tr>
           <?php endforeach; ?>
         </tbody>
@@ -139,8 +220,18 @@ include __DIR__ . '/../../templates/layout.php';
     </div>
   </div>
   <?php endif; ?>
-
-  <?php endif; ?>
 </div>
+
+<script>
+function formatCode(input) {
+  input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const btn = document.getElementById('submitBtn');
+  if (btn) btn.disabled = input.value.length !== 6;
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('submitBtn');
+  if (btn) btn.disabled = true;
+});
+</script>
 
 <?php include __DIR__ . '/../../templates/layout_end.php'; ?>
