@@ -26,7 +26,16 @@ if ($search) {
 if ($status === 'active')   { $where .= " AND s.is_active = 1"; }
 if ($status === 'inactive') { $where .= " AND s.is_active = 0"; }
 
-$query = "SELECT s.*, (SELECT COUNT(*) FROM group_students gs WHERE gs.student_id = s.id AND gs.status='active') as group_count FROM students s $where ORDER BY s.created_at DESC";
+// Add login filter
+if ($_GET['login'] ?? '' === 'yes') { $where .= " AND s.user_id IS NOT NULL"; }
+if ($_GET['login'] ?? '' === 'no')  { $where .= " AND s.user_id IS NULL"; }
+$loginFilter = $_GET['login'] ?? '';
+
+$query = "SELECT s.*, u.id AS uid, u.email AS login_email, u.is_active AS login_active,
+                  (SELECT COUNT(*) FROM group_students gs WHERE gs.student_id = s.id AND gs.status='active') AS group_count
+           FROM students s
+           LEFT JOIN users u ON u.id = s.user_id
+           $where ORDER BY s.created_at DESC";
 $result = paginate($query, $params, $page, 20);
 $students = $result['data'];
 
@@ -76,6 +85,22 @@ include __DIR__ . '/../../templates/layout.php';
   </div>
 </div>
 
+<!-- Bulk credential actions -->
+<?php
+$noAccountCount = $pdo->prepare("SELECT COUNT(*) FROM students WHERE center_id=? AND user_id IS NULL AND is_active=1");
+$noAccountCount->execute([$cid]);
+$missingCount = $noAccountCount->fetchColumn();
+?>
+<?php if ($missingCount > 0): ?>
+<div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:var(--radius-md);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+  <div style="flex:1;font-size:0.84rem;color:var(--text-secondary);">
+    <strong style="color:var(--text-primary);"><?= $missingCount ?> student<?= $missingCount>1?'s':''?></strong> have no login account and cannot attend or take exams.
+  </div>
+  <a href="bulk_credentials.php" class="btn btn-primary btn-sm">Create All Accounts →</a>
+</div>
+<?php endif; ?>
+
 <!-- TABLE -->
 <div class="card">
   <div class="card-body no-padding">
@@ -89,6 +114,7 @@ include __DIR__ . '/../../templates/layout.php';
             <th>Parent Phone</th>
             <th>Groups</th>
             <th>Status</th>
+            <th>Login</th>
             <th>Joined</th>
             <th style="text-align:right;">Actions</th>
           </tr>
@@ -137,6 +163,19 @@ include __DIR__ . '/../../templates/layout.php';
                 <span class="badge badge-muted">Inactive</span>
               <?php endif; ?>
             </td>
+            <td>
+              <?php if ($s['uid']): ?>
+                <a href="credentials.php?id=<?= $s['id'] ?>" style="display:inline-flex;align-items:center;gap:4px;font-size:0.75rem;color:<?= $s['login_active'] ? 'var(--success)' : 'var(--warning)' ?>;text-decoration:none;" title="<?= sanitize($s['login_email']) ?>">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                  <?= $s['login_active'] ? 'Active' : 'Suspended' ?>
+                </a>
+              <?php else: ?>
+                <a href="credentials.php?id=<?= $s['id'] ?>" style="font-size:0.75rem;color:var(--danger);text-decoration:none;" title="No login account">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:2px;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                  No account
+                </a>
+              <?php endif; ?>
+            </td>
             <td style="font-size:0.8rem; color:var(--text-muted);">
               <?= date('M j, Y', strtotime($s['created_at'])) ?>
             </td>
@@ -147,6 +186,9 @@ include __DIR__ . '/../../templates/layout.php';
                 </a>
                 <a href="edit.php?id=<?= $s['id'] ?>" class="btn btn-ghost btn-icon" title="Edit">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </a>
+                <a href="credentials.php?id=<?= $s['id'] ?>" class="btn btn-ghost btn-icon" title="Credentials" style="<?= $s['uid'] ? '' : 'color:var(--danger);' ?>">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 </a>
                 <button class="btn btn-danger btn-icon" title="Delete"
                         onclick="confirmDelete(<?= $s['id'] ?>, '<?= sanitize(addslashes($s['name'])) ?>')">
