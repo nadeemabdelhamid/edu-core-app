@@ -1,9 +1,14 @@
 <?php
 require_once __DIR__ . '/includes/helpers.php';
+requireAuth();
+
+// Students get their own portal
+if (isRole('student')) {
+    redirect('/educore/modules/students/home.php');
+}
+
 $pageTitle  = 'Dashboard';
 $activePage = 'dashboard';
-
-requireAuth();
 
 $pdo = getDB();
 $cid = centerId();

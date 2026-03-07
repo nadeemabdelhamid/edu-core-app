@@ -17,22 +17,36 @@ $roleColors = [
 $userColor = $roleColors[$user['role']] ?? '#f5a623';
 $flashMessages = getFlash();
 
-$navItems = [
-    'main' => [
-        ['href' => '/educore/dashboard.php',          'icon' => 'grid',         'label' => 'Dashboard',   'key' => 'dashboard'],
-        ['href' => '/educore/modules/students/',      'icon' => 'users',        'label' => 'Students',    'key' => 'students'],
-        ['href' => '/educore/modules/groups/',        'icon' => 'layers',       'label' => 'Groups',      'key' => 'groups'],
-        ['href' => '/educore/modules/attendance/',    'icon' => 'check-square', 'label' => 'Attendance',  'key' => 'attendance'],
-    ],
-    'academic' => [
-        ['href' => '/educore/modules/exams/',         'icon' => 'file-text',    'label' => 'Exams',       'key' => 'exams'],
-        ['href' => '/educore/modules/payments/',      'icon' => 'dollar-sign',  'label' => 'Payments',    'key' => 'payments'],
-        ['href' => '/educore/modules/reports/',       'icon' => 'bar-chart-2',  'label' => 'Reports',     'key' => 'reports'],
-    ],
-    'settings' => [
-        ['href' => '/educore/modules/settings/',      'icon' => 'settings',     'label' => 'Settings',    'key' => 'settings'],
-    ],
-];
+// ── Student portal gets its own lean nav ────────────────────
+if ($user['role'] === 'student') {
+    $navItems = [
+        'main' => [
+            ['href' => '/educore/modules/students/home.php',             'icon' => 'grid',         'label' => 'My Dashboard',  'key' => 'student_home'],
+            ['href' => '/educore/modules/attendance/submit.php',         'icon' => 'check-square', 'label' => 'Attendance',    'key' => 'attendance'],
+            ['href' => '/educore/modules/exams/student.php',             'icon' => 'file-text',    'label' => 'My Exams',      'key' => 'exams'],
+        ],
+        'account' => [
+            ['href' => '/educore/modules/students/profile.php',          'icon' => 'user',         'label' => 'My Profile',    'key' => 'student_profile'],
+        ],
+    ];
+} else {
+    $navItems = [
+        'main' => [
+            ['href' => '/educore/dashboard.php',          'icon' => 'grid',         'label' => 'Dashboard',   'key' => 'dashboard'],
+            ['href' => '/educore/modules/students/',      'icon' => 'users',        'label' => 'Students',    'key' => 'students'],
+            ['href' => '/educore/modules/groups/',        'icon' => 'layers',       'label' => 'Groups',      'key' => 'groups'],
+            ['href' => '/educore/modules/attendance/',    'icon' => 'check-square', 'label' => 'Attendance',  'key' => 'attendance'],
+        ],
+        'academic' => [
+            ['href' => '/educore/modules/exams/',         'icon' => 'file-text',    'label' => 'Exams',       'key' => 'exams'],
+            ['href' => '/educore/modules/payments/',      'icon' => 'dollar-sign',  'label' => 'Payments',    'key' => 'payments'],
+            ['href' => '/educore/modules/reports/',       'icon' => 'bar-chart-2',  'label' => 'Reports',     'key' => 'reports'],
+        ],
+        'settings' => [
+            ['href' => '/educore/modules/settings/',      'icon' => 'settings',     'label' => 'Settings',    'key' => 'settings'],
+        ],
+    ];
+}
 
 // Super admin gets extra items
 if ($user['role'] === 'super_admin') {
@@ -67,6 +81,7 @@ function navIcon($name) {
 
 $sectionLabels = [
     'main'     => 'Navigation',
+    'account'  => 'Account',
     'academic' => 'Academic',
     'settings' => 'System',
     'platform' => 'Platform Admin',
