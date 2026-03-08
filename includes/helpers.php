@@ -176,3 +176,125 @@ function redirect($url) {
     header("Location: $url");
     exit;
 }
+
+// ─── PLAN LIMITS ─────────────────────────────────────────────
+function getPlanLimits() {
+    if (isRole('super_admin')) return ['max_students'=>PHP_INT_MAX,'max_teachers'=>PHP_INT_MAX,'max_groups'=>PHP_INT_MAX,'features'=>[]];
+    $cid = centerId();
+    if (!$cid) return null;
+    $pdo = getDB();
+    $stmt = $pdo->prepare("
+        SELECT p.max_students, p.max_teachers, p.max_groups, p.features,
+               s.status, s.expires_at, s.trial_ends_at, p.name AS plan_name, p.slug AS plan_slug
+        FROM subscriptions s JOIN plans p ON p.id=s.plan_id
+        WHERE s.center_id=? AND s.status IN('active','trial')
+        AND (s.expires_at IS NULL OR s.expires_at > NOW())
+        ORDER BY s.id DESC LIMIT 1");
+    $stmt->execute([$cid]);
+    $row = $stmt->fetch();
+    if (!$row) return ['max_students'=>0,'max_teachers'=>0,'max_groups'=>0,'features'=>[],'plan_name'=>'None','plan_slug'=>'none','status'=>'expired'];
+    $row['features'] = json_decode($row['features'] ?? '{}', true) ?? [];
+    return $row;
+}
+
+function checkLimit($resource) {
+    $limits = getPlanLimits();
+    if (!$limits) return ['ok'=>false,'used'=>0,'max'=>0,'plan'=>'None','slug'=>'none'];
+    $cid = centerId();
+    $pdo = getDB();
+    $queryMap = [
+        'students' => ["SELECT COUNT(*) FROM students WHERE center_id=? AND is_active=1",     (int)$limits['max_students']],
+        'groups'   => ["SELECT COUNT(*) FROM `groups` WHERE center_id=? AND is_active=1",      (int)$limits['max_groups']],
+        'teachers' => ["SELECT COUNT(*) FROM users WHERE center_id=? AND role IN('teacher','assistant') AND is_active=1", (int)$limits['max_teachers']],
+    ];
+    if (!isset($queryMap[$resource])) {
+        return ['ok'=>true,'used'=>0,'max'=>PHP_INT_MAX,'plan'=>$limits['plan_name']??'','slug'=>$limits['plan_slug']??''];
+    }
+    [$sql, $max] = $queryMap[$resource];
+    $s = $pdo->prepare($sql);
+    $s->execute([$cid]);
+    $used = (int)$s->fetchColumn();
+    return [
+        'ok'   => ($max >= 999999 || $used < $max),
+        'used' => $used,
+        'max'  => $max,
+        'plan' => $limits['plan_name'] ?? '',
+        'slug' => $limits['plan_slug'] ?? '',
+    ];
+}
+
+function getSubscription() {
+    $cid = centerId();
+    if (!$cid) return null;
+    $pdo = getDB();
+    $stmt = $pdo->prepare("
+        SELECT s.*, p.name AS plan_name, p.slug AS plan_slug, p.price, p.billing_cycle,
+               p.max_students, p.max_teachers, p.max_groups, p.features
+        FROM subscriptions s JOIN plans p ON p.id=s.plan_id
+        WHERE s.center_id=? ORDER BY s.id DESC LIMIT 1");
+    $stmt->execute([$cid]);
+    $row = $stmt->fetch();
+    if ($row) $row['features'] = json_decode($row['features'] ?? '{}', true) ?? [];
+    return $row;
+}
+
+function trialDaysLeft() {
+    $sub = getSubscription();
+    if (!$sub || $sub['status'] !== 'trial' || !$sub['trial_ends_at']) return null;
+    $diff = (strtotime($sub['trial_ends_at']) - time()) / 86400;
+    return max(0, (int)ceil($diff));
+}
+
+// ─── RATE LIMITING ───────────────────────────────────────────
+function rateLimit($identifier, $action, $maxAttempts = 5, $windowSeconds = 300) {
+    try {
+        $pdo  = getDB();
+        $now  = date('Y-m-d H:i:s');
+        $win  = date('Y-m-d H:i:s', time() - $windowSeconds);
+        // Clean old entries
+        $pdo->prepare("DELETE FROM rate_limits WHERE last_attempt < ? AND action=?")->execute([$win, $action]);
+        // Check current
+        $stmt = $pdo->prepare("SELECT * FROM rate_limits WHERE identifier=? AND action=? AND window_start >= ?");
+        $stmt->execute([$identifier, $action, $win]);
+        $row  = $stmt->fetch();
+        if ($row) {
+            if ($row['attempts'] >= $maxAttempts) return false;
+            $pdo->prepare("UPDATE rate_limits SET attempts=attempts+1, last_attempt=? WHERE id=?")->execute([$now, $row['id']]);
+        } else {
+            $pdo->prepare("INSERT INTO rate_limits (identifier, action, attempts, window_start, last_attempt) VALUES (?,?,1,?,?)")->execute([$identifier, $action, $now, $now]);
+        }
+        return true;
+    } catch (Exception $e) { return true; } // fail open if table missing
+}
+
+// ─── NOTIFICATIONS ───────────────────────────────────────────
+function pushNotification($userId, $type, $title, $body = '', $link = '', $centerId = null) {
+    try {
+        $pdo = getDB();
+        $pdo->prepare("INSERT INTO notifications (center_id, user_id, type, title, body, link) VALUES (?,?,?,?,?,?)")
+            ->execute([$centerId ?? centerId(), $userId, $type, $title, $body, $link]);
+    } catch (Exception $e) { /* silent */ }
+}
+
+function getUnreadNotifications($userId, $limit = 10) {
+    try {
+        $pdo  = getDB();
+        $stmt = $pdo->prepare("SELECT * FROM notifications WHERE user_id=? AND is_read=0 ORDER BY created_at DESC LIMIT ?");
+        $stmt->execute([$userId, $limit]);
+        return $stmt->fetchAll();
+    } catch (Exception $e) { return []; }
+}
+
+function markNotificationsRead($userId) {
+    try {
+        getDB()->prepare("UPDATE notifications SET is_read=1 WHERE user_id=?")->execute([$userId]);
+    } catch (Exception $e) {}
+}
+
+function unreadCount($userId) {
+    try {
+        $s = getDB()->prepare("SELECT COUNT(*) FROM notifications WHERE user_id=? AND is_read=0");
+        $s->execute([$userId]);
+        return (int)$s->fetchColumn();
+    } catch (Exception $e) { return 0; }
+}

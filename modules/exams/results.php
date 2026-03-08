@@ -104,6 +104,8 @@ include __DIR__ . '/../../templates/layout.php';
   <div style="display:flex;gap:8px;">
     <?php if($submissions): ?>
     <a href="?id=<?=$eid?>&export=csv" class="btn btn-ghost btn-sm" style="color:var(--success);">↓ Export CSV</a>
+    <a href="export_results.php?id=<?=$eid?>" class="btn btn-ghost btn-sm">↓ Full Export</a>
+    <a href="analytics.php?id=<?=$eid?>" class="btn btn-ghost btn-sm">📊 Analytics</a>
     <?php endif; ?>
     <?php if($exam['status']==='active'): ?>
     <form method="POST" style="display:inline;">

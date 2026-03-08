@@ -169,23 +169,54 @@ $sectionLabels = [
       <div class="topbar-spacer"></div>
 
       <div class="topbar-actions">
-        <button class="topbar-btn" title="Notifications">
-          <?= navIcon('bell') ?>
-          <span class="notif-dot"></span>
-        </button>
-        <?php if ($user['center_id']): ?>
         <?php
-          $pdo = getDB();
-          $sub = $pdo->prepare("SELECT p.name, p.slug FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.center_id=? AND s.status IN('active','trial') ORDER BY s.id DESC LIMIT 1");
-          $sub->execute([$user['center_id']]);
-          $plan = $sub->fetch();
+          $notifCount = !isRole('student') ? unreadCount(authId()) : 0;
+          $trialLeft  = (!isRole('super_admin','student') && $user['center_id']) ? trialDaysLeft() : null;
+          $subInfo    = (!isRole('super_admin','student') && $user['center_id']) ? getSubscription() : null;
         ?>
-        <?php if ($plan): ?>
-          <span class="plan-badge plan-<?= $plan['slug'] ?>"><?= $plan['name'] ?></span>
+        <div style="position:relative;">
+          <button class="topbar-btn" title="Notifications" onclick="toggleNotifPanel()" id="notifBtn">
+            <?= navIcon('bell') ?>
+            <?php if($notifCount > 0): ?>
+            <span class="notif-dot" id="notifDot"></span>
+            <?php endif; ?>
+          </button>
+          <div id="notifPanel" style="display:none;position:absolute;right:0;top:44px;width:300px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);z-index:200;">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-family:var(--font-display);font-size:0.88rem;font-weight:600;">Notifications</span>
+              <?php if($notifCount>0): ?><a href="#" onclick="markAllRead();return false;" style="font-size:0.72rem;color:var(--accent);text-decoration:none;">Mark all read</a><?php endif; ?>
+            </div>
+            <div style="max-height:280px;overflow-y:auto;">
+              <?php $notifs=getUnreadNotifications(authId(),8);
+              if($notifs): foreach($notifs as $n): ?>
+              <div style="padding:11px 16px;border-bottom:1px solid var(--border);font-size:0.8rem;">
+                <div style="font-weight:600;color:var(--text-primary);margin-bottom:2px;"><?=sanitize($n['title'])?></div>
+                <?php if($n['body']): ?><div style="color:var(--text-muted);font-size:0.74rem;"><?=sanitize($n['body'])?></div><?php endif; ?>
+                <div style="color:var(--text-muted);font-size:0.68rem;margin-top:3px;"><?=date('M j, g:i a',strtotime($n['created_at']))?></div>
+              </div>
+              <?php endforeach; else: ?>
+              <div style="padding:24px 16px;text-align:center;color:var(--text-muted);font-size:0.8rem;">All caught up ✓</div>
+              <?php endif; ?>
+            </div>
+          </div>
+        </div>
+        <?php if($subInfo): ?>
+          <span class="plan-badge plan-<?=$subInfo['plan_slug']?>"><?=sanitize($subInfo['plan_name'])?></span>
         <?php endif; ?>
+        <?php if(isRole('owner') && $user['center_id']): ?>
+        <a href="/educore/modules/settings/" class="topbar-btn" title="Settings"><?=navIcon('settings')?></a>
         <?php endif; ?>
       </div>
     </header>
+
+    <!-- TRIAL BANNER -->
+    <?php if($trialLeft !== null && $trialLeft <= 7 && !isRole('student')): ?>
+    <div style="background:<?=$trialLeft<=2?'rgba(239,68,68,0.12)':'rgba(245,166,35,0.08)'?>;border-bottom:1px solid <?=$trialLeft<=2?'rgba(239,68,68,0.3)':'rgba(245,166,35,0.2)'?>;padding:10px 28px;display:flex;align-items:center;gap:12px;font-size:0.82rem;">
+      <span><?=$trialLeft<=2?'⚠️':'⏰'?></span>
+      <span style="color:var(--text-primary);">Your trial <?=$trialLeft>0?"expires in <strong>$trialLeft day".($trialLeft>1?'s':'')."</strong>":'<strong>expired today</strong>'?>.</span>
+      <a href="/educore/modules/settings/subscription.php" style="margin-left:auto;background:var(--accent);color:var(--text-inverse);padding:5px 14px;border-radius:20px;font-size:0.75rem;font-weight:700;text-decoration:none;">Upgrade Now →</a>
+    </div>
+    <?php endif; ?>
 
     <!-- FLASH MESSAGES -->
     <?php if ($flashMessages): ?>

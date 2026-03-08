@@ -2,6 +2,11 @@
 require_once __DIR__ . '/../../includes/helpers.php';
 requireRole('owner', 'teacher', 'assistant');
 
+// Enforce plan student limit
+$limitResource = 'students';
+$limitRedirect = '/educore/modules/students/';
+include __DIR__ . '/../../includes/limit_gate.php';
+
 $pdo    = getDB();
 $cid    = centerId();
 $editId = isset($_GET['id']) ? (int)$_GET['id'] : null;

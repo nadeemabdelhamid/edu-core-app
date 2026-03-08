@@ -12,25 +12,30 @@ $email = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
-    $email    = trim($_POST['email'] ?? '');
+    $email    = trim(strtolower($_POST['email'] ?? ''));
     $password = $_POST['password'] ?? '';
+    $ip       = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 
-    if (!$email || !$password) {
+    // Rate limit: 10 attempts per 15 min per IP
+    if (!rateLimit($ip . ':' . $email, 'login', 10, 900)) {
+        $errors[] = 'Too many login attempts. Please wait 15 minutes and try again.';
+    } elseif (!$email || !$password) {
         $errors[] = 'Email and password are required.';
     } else {
         $pdo  = getDB();
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1");
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? LIMIT 1");
         $stmt->execute([$email]);
         $user = $stmt->fetch();
 
-        if ($user && password_verify($password, $user['password'])) {
-            // Load subscription info if center user
+        if ($user && !$user['is_active']) {
+            $errors[] = 'This account has been suspended. Contact your administrator.';
+        } elseif ($user && password_verify($password, $user['password'])) {
             login($user);
             flash('success', 'Welcome back, ' . $user['name'] . '!');
             header('Location: /educore/dashboard.php');
             exit;
         } else {
-            $errors[] = 'Invalid credentials. Please try again.';
+            $errors[] = 'Invalid email or password.';
         }
     }
 }

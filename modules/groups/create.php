@@ -2,6 +2,11 @@
 require_once __DIR__ . '/../../includes/helpers.php';
 requireRole('owner', 'teacher');
 
+// Enforce plan group limit
+$limitResource = 'groups';
+$limitRedirect = '/educore/modules/groups/';
+include __DIR__ . '/../../includes/limit_gate.php';
+
 $pdo    = getDB();
 $cid    = centerId();
 $uid    = authId();

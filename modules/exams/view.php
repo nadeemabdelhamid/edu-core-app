@@ -60,7 +60,11 @@ include __DIR__ . '/../../templates/layout.php';
       Created by <?=sanitize($exam['creator_name'])?>
     </p>
   </div>
-  <div style="display:flex;gap:8px;">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <!-- Always visible -->
+    <a href="print.php?id=<?=$eid?>" class="btn btn-ghost btn-sm" target="_blank" title="Print exam paper">🖨 Print</a>
+    <a href="duplicate.php?id=<?=$eid?>" class="btn btn-ghost btn-sm" onclick="return confirm('Duplicate this exam?')" title="Clone this exam">⧉ Duplicate</a>
+
     <?php if(in_array($exam['status'],['draft','scheduled'])): ?>
     <a href="builder.php?id=<?=$eid?>" class="btn btn-ghost">Edit Questions</a>
     <form method="POST" style="display:inline;">
@@ -68,6 +72,7 @@ include __DIR__ . '/../../templates/layout.php';
       <button type="submit" class="btn btn-primary" onclick="return confirm('Activate exam?')">🚀 Activate</button>
     </form>
     <?php endif; ?>
+
     <?php if($exam['status']==='active'): ?>
     <a href="results.php?id=<?=$eid?>" class="btn btn-ghost">Live Results</a>
     <form method="POST" style="display:inline;">
@@ -75,9 +80,26 @@ include __DIR__ . '/../../templates/layout.php';
       <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Close exam?')">Close</button>
     </form>
     <?php endif; ?>
-    <?php if($exam['status']==='closed'): ?>
-    <a href="results.php?id=<?=$eid?>" class="btn btn-primary">View Results</a>
+
+    <?php if(in_array($exam['status'],['closed','active'])): ?>
+    <a href="results.php?id=<?=$eid?>" class="btn <?=$exam['status']==='closed'?'btn-primary':'btn-ghost'?>">Results</a>
+    <a href="analytics.php?id=<?=$eid?>" class="btn btn-ghost btn-sm" title="Analytics">📊 Analytics</a>
+    <a href="export_results.php?id=<?=$eid?>" class="btn btn-ghost btn-sm" title="Export CSV">↓ Export</a>
     <?php endif; ?>
+
+    <?php if($exam['status']==='closed'):
+      // Check if there are short-answer questions needing grading
+      $sqC = $pdo->prepare("SELECT COUNT(*) FROM exam_questions WHERE exam_id=? AND type='short_answer'");
+      $sqC->execute([$eid]); $sqCount = $sqC->fetchColumn();
+      $ngC = $pdo->prepare("SELECT COUNT(*) FROM exam_submissions WHERE exam_id=? AND status='submitted'");
+      $ngC->execute([$eid]); $ngCount = $ngC->fetchColumn();
+      if($sqCount > 0):
+    ?>
+    <a href="grade.php?id=<?=$eid?>" class="btn <?=$ngCount>0?'btn-primary':'btn-ghost'?> btn-sm" style="position:relative;">
+      ✏️ Grade
+      <?php if($ngCount>0): ?><span style="position:absolute;top:-6px;right:-6px;background:var(--danger);color:#fff;font-size:0.6rem;font-weight:700;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;"><?=$ngCount?></span><?php endif; ?>
+    </a>
+    <?php endif; endif; ?>
   </div>
 </div>
 

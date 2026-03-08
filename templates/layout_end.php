@@ -45,6 +45,25 @@ document.querySelectorAll('.flash-msg').forEach(function(el) {
   }, 4000);
 });
 
+
+// ─── NOTIFICATION PANEL ──────────────────────────────────
+function toggleNotifPanel() {
+  const p = document.getElementById('notifPanel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+function markAllRead() {
+  fetch('/educore/modules/settings/mark_read.php', {method:'POST', headers:{'X-CSRF-TOKEN': csrfToken}});
+  document.getElementById('notifDot') && document.getElementById('notifDot').remove();
+  document.getElementById('notifPanel').querySelectorAll('[style*="border-bottom"]').forEach(el => el.remove());
+  const list = document.getElementById('notifPanel').querySelector('[style*="max-height"]');
+  if(list) list.innerHTML = '<div style="padding:24px 16px;text-align:center;color:var(--text-muted);font-size:0.8rem;">All caught up ✓</div>';
+}
+document.addEventListener('click', function(e) {
+  const panel = document.getElementById('notifPanel');
+  const btn   = document.getElementById('notifBtn');
+  if(panel && btn && !panel.contains(e.target) && !btn.contains(e.target)) panel.style.display='none';
+});
+
 // ─── CSRF HEADER FOR AJAX ────────────────────────────────
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
 
