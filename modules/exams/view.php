@@ -63,6 +63,7 @@ include __DIR__ . '/../../templates/layout.php';
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <!-- Always visible -->
     <a href="print.php?id=<?=$eid?>" class="btn btn-ghost btn-sm" target="_blank" title="Print exam paper">🖨 Print</a>
+    <a href="paper_studio.php?exam=<?=$eid?>" class="btn btn-ghost btn-sm" title="Open in Paper Studio">📄 Studio</a>
     <a href="duplicate.php?id=<?=$eid?>" class="btn btn-ghost btn-sm" onclick="return confirm('Duplicate this exam?')" title="Clone this exam">⧉ Duplicate</a>
 
     <?php if(in_array($exam['status'],['draft','scheduled'])): ?>
