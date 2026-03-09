@@ -15,32 +15,43 @@ $stStmt->execute([$uid,$cid]);
 $student = $stStmt->fetch();
 if (!$student) { flash('error','Student profile not found.'); redirect('/educore/dashboard.php'); }
 
-// Available exams: active + student enrolled in group (or no group restriction)
+// Check if is_hidden column exists (migration may not have run yet)
+try {
+    $colCheck = $pdo->query("SELECT is_hidden FROM exams LIMIT 1");
+    $hasHiddenCol = true;
+} catch (Exception $e) {
+    $hasHiddenCol = false;
+}
+
+$hiddenFilter = $hasHiddenCol ? "AND COALESCE(e.is_hidden,0) = 0" : "";
+
 $examStmt = $pdo->prepare("
-    SELECT e.*,g.name AS group_name,
+    SELECT e.*, g.name AS group_name,
            es.status AS my_status, es.percentage AS my_score, es.passed AS my_passed,
            es.submitted_at AS my_submitted
     FROM exams e
     LEFT JOIN `groups` g ON g.id=e.group_id
-    LEFT JOIN exam_submissions es ON es.exam_id=e.id AND es.student_id=? AND es.status IN('submitted','graded','in_progress')
+    LEFT JOIN exam_submissions es ON es.exam_id=e.id AND es.student_id=?
+              AND es.status IN('submitted','graded','in_progress')
     WHERE e.center_id=?
       AND e.status IN('active','closed')
+      $hiddenFilter
       AND (e.group_id IS NULL
-           OR EXISTS(SELECT 1 FROM group_students gs WHERE gs.group_id=e.group_id AND gs.student_id=? AND gs.status='active'))
+           OR EXISTS(SELECT 1 FROM group_students gs
+                     WHERE gs.group_id=e.group_id AND gs.student_id=? AND gs.status='active'))
     ORDER BY FIELD(e.status,'active','closed'), e.starts_at DESC");
 $examStmt->execute([$student['id'],$cid,$student['id']]);
 $exams = $examStmt->fetchAll();
 
-// Auto-update exam statuses so student always sees real-time state
-// (same logic as index.php — fixes "exam is live but shows Closed" bug)
+// Auto-sync statuses
 foreach ($exams as &$ex) {
-    if ($ex['status']==='scheduled' && $ex['starts_at'] && strtotime($ex['starts_at']) <= time()) {
+    if ($ex['status']==='scheduled' && $ex['starts_at'] && strtotime($ex['starts_at'])<=time()) {
         $pdo->prepare("UPDATE exams SET status='active' WHERE id=?")->execute([$ex['id']]);
-        $ex['status'] = 'active';
+        $ex['status']='active';
     }
-    if ($ex['status']==='active' && $ex['ends_at'] && strtotime($ex['ends_at']) < time()) {
-        $pdo->prepare("UPDATE exams SET status='closed', ends_at=COALESCE(ends_at,NOW()) WHERE id=?")->execute([$ex['id']]);
-        $ex['status'] = 'closed';
+    if ($ex['status']==='active' && $ex['ends_at'] && strtotime($ex['ends_at'])<time()) {
+        $pdo->prepare("UPDATE exams SET status='closed',ends_at=COALESCE(ends_at,NOW()) WHERE id=?")->execute([$ex['id']]);
+        $ex['status']='closed';
     }
 }
 unset($ex);
@@ -56,50 +67,48 @@ include __DIR__ . '/../../templates/layout.php';
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
   <?php foreach($exams as $ex):
     $isActive   = $ex['status']==='active';
+    $isOpen     = isset($ex['is_open']) ? (bool)$ex['is_open'] : true;
     $submitted  = in_array($ex['my_status'],['submitted','graded']);
     $inProgress = $ex['my_status']==='in_progress';
     $pct        = (float)($ex['my_score']??0);
     $passed     = (bool)$ex['my_passed'];
     $pctColor   = $pct >= $ex['passing_score'] ? 'var(--success)' : 'var(--danger)';
   ?>
-  <div class="card" style="<?=$isActive && !$submitted?'border-color:rgba(34,197,94,0.3);':''?>">
+  <div class="card" style="<?=$isActive&&!$submitted&&$isOpen?'border-color:rgba(34,197,94,0.3);':''?>">
     <div class="card-body" style="padding:20px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
         <span class="badge <?=$isActive?'badge-success':'badge-muted'?>"><?=$isActive?'● Active':'Closed'?></span>
-        <span class="badge <?=match($ex['type']){
-          'exam'=>'badge-danger','quiz'=>'badge-warning','practice'=>'badge-info',default=>'badge-muted'
-        }?>"><?=ucfirst($ex['type'])?></span>
+        <span class="badge <?=match($ex['type']){'exam'=>'badge-danger','quiz'=>'badge-warning','practice'=>'badge-info',default=>'badge-muted'}?>"><?=ucfirst($ex['type'])?></span>
       </div>
       <div style="font-family:var(--font-display);font-size:1rem;font-weight:700;color:var(--text-primary);margin-bottom:4px;"><?=sanitize($ex['title'])?></div>
       <?php if($ex['group_name']): ?>
-      <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:12px;">📚 <?=sanitize($ex['group_name'])?></div>
+      <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:12px;">📚 <?=sanitize($ex['group_name'])?></div>
       <?php endif; ?>
 
-      <div style="display:flex;gap:12px;font-size:0.78rem;color:var(--text-muted);margin-bottom:16px;">
+      <div style="display:flex;gap:12px;font-size:.78rem;color:var(--text-muted);margin-bottom:16px;flex-wrap:wrap;">
         <span>⏱ <?=$ex['duration_minutes']?> min</span>
         <span>📝 Pass: <?=$ex['passing_score']?>%</span>
-        <?php if($ex['ends_at'] && $isActive): ?>
-        <span style="color:var(--warning);">⏰ Ends <?=date('M j H:i',strtotime($ex['ends_at']))?></span>
-        <?php endif; ?>
+        <?php if($ex['ends_at']&&$isActive): ?><span style="color:var(--warning);">⏰ Ends <?=date('M j H:i',strtotime($ex['ends_at']))?></span><?php endif; ?>
       </div>
 
       <?php if($submitted): ?>
-        <!-- Already done -->
-        <div style="background:<?=$passed?'rgba(34,197,94,0.08)':'rgba(239,68,68,0.08)'?>;border-radius:var(--radius-sm);padding:10px;text-align:center;margin-bottom:12px;">
+        <div style="background:<?=$passed?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)'?>;border-radius:var(--radius-sm);padding:10px;text-align:center;margin-bottom:12px;">
           <div style="font-size:1.4rem;font-weight:800;font-family:var(--font-display);color:<?=$pctColor?>;"><?=round($pct)?>%</div>
-          <div style="font-size:0.72rem;color:<?=$pctColor?>;"><?=$passed?'✓ Passed':'✗ Failed'?></div>
+          <div style="font-size:.72rem;color:<?=$pctColor?>;"><?=$passed?'✓ Passed':'✗ Failed'?></div>
         </div>
-        <?php if($ex['show_results']==='immediately' || ($ex['show_results']==='after_close' && $ex['status']==='closed')): ?>
-        <a href="result.php?exam=<?=$ex['id']?>&student=<?=$student['id']?>" class="btn btn-ghost w-full" style="font-size:0.84rem;">View Results</a>
+        <?php if($ex['show_results']==='immediately'||($ex['show_results']==='after_close'&&$ex['status']==='closed')): ?>
+        <a href="result.php?exam=<?=$ex['id']?>&student=<?=$student['id']?>" class="btn btn-ghost w-full" style="font-size:.84rem;">View Results</a>
         <?php else: ?>
-        <div class="btn w-full" style="text-align:center;background:var(--bg-elevated);color:var(--text-muted);font-size:0.82rem;cursor:default;">Results pending</div>
+        <div class="btn w-full" style="text-align:center;background:var(--bg-elevated);color:var(--text-muted);font-size:.82rem;cursor:default;">Results pending</div>
         <?php endif; ?>
       <?php elseif($inProgress): ?>
         <a href="take.php?id=<?=$ex['id']?>" class="btn btn-warning w-full">Resume Exam →</a>
-      <?php elseif($isActive): ?>
+      <?php elseif($isActive&&$isOpen): ?>
         <a href="take.php?id=<?=$ex['id']?>" class="btn btn-primary w-full">Start Exam →</a>
+      <?php elseif($isActive&&!$isOpen): ?>
+        <div class="btn w-full" style="text-align:center;background:var(--bg-elevated);color:var(--danger);font-size:.82rem;cursor:default;">🔒 Entry Locked</div>
       <?php else: ?>
-        <div class="btn w-full" style="text-align:center;background:var(--bg-elevated);color:var(--text-muted);font-size:0.82rem;cursor:default;">Not submitted</div>
+        <div class="btn w-full" style="text-align:center;background:var(--bg-elevated);color:var(--text-muted);font-size:.82rem;cursor:default;">Not submitted</div>
       <?php endif; ?>
     </div>
   </div>

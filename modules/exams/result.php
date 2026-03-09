@@ -80,6 +80,48 @@ $qStmt = $pdo->prepare("SELECT eq.*,ea.student_answer,ea.is_correct,ea.score_awa
 $qStmt->execute([$submission['id'],$eid]);
 $questions = $qStmt->fetchAll();
 
+// Load focus violations for this submission (saved permanently in exam_focus_log)
+$focusEvents   = [];
+$focusSummary  = ['violations'=>0,'away_seconds'=>0];
+if (!isRole('student')) {
+    try {
+        $feStmt = $pdo->prepare("
+            SELECT event, created_at
+            FROM exam_focus_log
+            WHERE submission_id=? AND exam_id=?
+            ORDER BY created_at ASC");
+        $feStmt->execute([$submission['id'],$eid]);
+        $rawEvents = $feStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Build violation pairs (blur→focus)
+        $blurTime = null;
+        foreach ($rawEvents as $ev) {
+            if ($ev['event']==='blur') {
+                $blurTime = $ev['created_at'];
+            } elseif ($ev['event']==='focus' && $blurTime) {
+                $gap = strtotime($ev['created_at']) - strtotime($blurTime);
+                $focusEvents[] = [
+                    'left_at'     => $blurTime,
+                    'returned_at' => $ev['created_at'],
+                    'seconds'     => $gap,
+                ];
+                $focusSummary['violations']++;
+                $focusSummary['away_seconds'] += $gap;
+                $blurTime = null;
+            }
+        }
+        // Still-open blur (student never returned before exam ended)
+        if ($blurTime) {
+            $focusEvents[] = [
+                'left_at'     => $blurTime,
+                'returned_at' => null,
+                'seconds'     => null,
+            ];
+            $focusSummary['violations']++;
+        }
+    } catch (Exception $e) { /* table not created yet */ }
+}
+
 // Handle teacher grading POST
 if ($_SERVER['REQUEST_METHOD']==='POST' && isRole('owner','teacher','assistant')) {
     csrf_verify();
@@ -301,6 +343,84 @@ include __DIR__ . '/../../templates/layout.php';
 </form>
 <?php else: ?>
 <div class="card"><div class="card-body" style="text-align:center;color:var(--text-muted);padding:40px;">Review not available until results are released.</div></div>
+<?php endif; ?>
+
+<?php if(!isRole('student') && ($focusSummary['violations'] > 0 || count($focusEvents) > 0)): ?>
+<div class="card" style="margin-top:20px;border-color:rgba(239,68,68,.3);">
+  <div class="card-header" style="border-color:rgba(239,68,68,.2);">
+    <span class="card-title" style="color:var(--danger);">
+      ⚠️ Focus Violations — <?=sanitize($student['name'])?>
+    </span>
+    <div style="display:flex;gap:12px;align-items:center;">
+      <span style="font-size:.75rem;color:var(--text-muted);">
+        <?=$focusSummary['violations']?> violation<?=$focusSummary['violations']!=1?'s':''?>
+      </span>
+      <?php if($focusSummary['away_seconds']>0):
+        $aw = $focusSummary['away_seconds'];
+        $awStr = ($aw>=60 ? floor($aw/60).'m ' : '').($aw%60).'s';
+      ?>
+      <span style="font-size:.75rem;color:var(--danger);font-weight:600;">
+        Total away: <?=$awStr?>
+      </span>
+      <?php endif; ?>
+    </div>
+  </div>
+  <div class="card-body no-padding">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Left Exam At</th>
+          <th>Returned At</th>
+          <th>Time Away</th>
+          <th>Risk</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach($focusEvents as $i=>$fe):
+          $secs = $fe['seconds'];
+          $risk = $secs === null ? 'high'
+                : ($secs > 60 ? 'high' : ($secs > 15 ? 'medium' : 'low'));
+          $riskColor = ['high'=>'var(--danger)','medium'=>'var(--warning)','low'=>'var(--text-muted)'][$risk];
+          $riskLabel = ['high'=>'⚠️ High','medium'=>'⚡ Medium','low'=>'✓ Low'][$risk];
+          $awayStr   = $secs === null ? 'Did not return'
+                     : (($secs>=60 ? floor($secs/60).'m ' : '').($secs%60).'s');
+        ?>
+        <tr>
+          <td style="color:var(--text-muted);font-size:.8rem;"><?=$i+1?></td>
+          <td style="font-size:.82rem;font-weight:600;color:var(--danger);">
+            <?=date('H:i:s',strtotime($fe['left_at']))?>
+            <div style="font-size:.68rem;color:var(--text-muted);font-weight:400;">
+              <?=date('M j, Y',strtotime($fe['left_at']))?>
+            </div>
+          </td>
+          <td style="font-size:.82rem;color:<?=$fe['returned_at']?'var(--success)':'var(--danger)'?>;">
+            <?=$fe['returned_at'] ? date('H:i:s',strtotime($fe['returned_at'])) : '— Never returned'?>
+          </td>
+          <td style="font-weight:700;font-size:.85rem;color:<?=$riskColor?>;">
+            <?=$awayStr?>
+          </td>
+          <td>
+            <span style="font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:10px;
+                         background:<?=$risk==='high'?'rgba(239,68,68,.12)':($risk==='medium'?'rgba(245,158,11,.12)':'rgba(100,116,139,.1)')?>; 
+                         color:<?=$riskColor?>;">
+              <?=$riskLabel?>
+            </span>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+  <div style="padding:10px 20px;font-size:.72rem;color:var(--text-muted);border-top:1px solid var(--border);">
+    📌 Violations are permanently recorded from the live exam session. Data is stored in <code>exam_focus_log</code>.
+  </div>
+</div>
+<?php elseif(!isRole('student') && count($focusEvents)===0): ?>
+<div style="margin-top:16px;padding:12px 18px;background:var(--bg-elevated);border-radius:var(--radius-sm);
+            font-size:.78rem;color:var(--text-muted);display:flex;align-items:center;gap:8px;">
+  <span style="color:var(--success);">✓</span> No focus violations recorded for this student.
+</div>
 <?php endif; ?>
 
 <?php include __DIR__ . '/../../templates/layout_end.php'; ?>

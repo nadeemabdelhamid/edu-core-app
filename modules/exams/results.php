@@ -50,6 +50,22 @@ $subStmt = $pdo->prepare("
 $subStmt->execute([$eid,$cid]);
 $submissions = $subStmt->fetchAll();
 
+// Load focus violations per submission (if table exists)
+$focusData = [];
+try {
+    $fStmt = $pdo->prepare("
+        SELECT submission_id,
+               SUM(event='blur') AS blur_count,
+               COUNT(*) AS event_count
+        FROM exam_focus_log
+        WHERE exam_id=? AND center_id=?
+        GROUP BY submission_id");
+    $fStmt->execute([$eid,$cid]);
+    foreach ($fStmt->fetchAll() as $row) {
+        $focusData[$row['submission_id']] = (int)$row['blur_count'];
+    }
+} catch (Exception $e) { /* table not yet created */ }
+
 // Stats
 $graded  = array_filter($submissions,fn($s)=>in_array($s['status'],['submitted','graded']));
 $scores  = array_column(array_filter($graded,fn($s)=>$s['percentage']>0),'percentage');
@@ -150,7 +166,7 @@ include __DIR__ . '/../../templates/layout.php';
     <?php if($submissions): ?>
     <table class="data-table" id="resultsTable">
       <thead>
-        <tr><th>#</th><th>Student</th><th>Score</th><th>%</th><th>Result</th><th>Status</th><th>Time</th><th style="text-align:right;">Detail</th></tr>
+        <tr><th>#</th><th>Student</th><th>Score</th><th>%</th><th>Result</th><th>Status</th><th>Time</th><th style="text-align:center;">⚠️ Focus</th><th style="text-align:right;">Detail</th></tr>
       </thead>
       <tbody>
         <?php foreach($submissions as $rank => $s):
@@ -188,6 +204,17 @@ include __DIR__ . '/../../templates/layout.php';
             <?php endif; ?>
           </td>
           <td style="font-size:0.78rem;color:var(--text-muted);"><?=gmdate('i:s',(int)$s['time_spent_sec'])?></td>
+          <td style="text-align:center;">
+            <?php $vCount = $focusData[$s['id']] ?? 0; ?>
+            <?php if($vCount > 0): ?>
+            <span style="font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:10px;
+                         background:rgba(239,68,68,.12);color:var(--danger);">
+              ⚠️ <?=$vCount?>×
+            </span>
+            <?php else: ?>
+            <span style="font-size:.72rem;color:var(--text-muted);">—</span>
+            <?php endif; ?>
+          </td>
           <td style="text-align:right;">
             <a href="result.php?exam=<?=$eid?>&student=<?=$s['student_id']?>" class="btn btn-ghost btn-icon btn-sm">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>

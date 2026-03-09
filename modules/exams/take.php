@@ -37,7 +37,18 @@ if ($exam['status']==='active' && $exam['ends_at'] && strtotime($exam['ends_at']
     $exam['status'] = 'closed';
 }
 if ($exam['status']==='closed') { redirect("result.php?exam=$eid&student={$student['id']}"); }
-if ($exam['starts_at'] && strtotime($exam['starts_at']) > time()) { flash('error','This exam has not started yet.'); redirect('/educore/dashboard.php'); }
+// Only block on starts_at if exam is still scheduled (not yet active)
+// Once teacher manually activates, status='active' — starts_at check must NOT run
+if ($exam['status']==='scheduled' && $exam['starts_at'] && strtotime($exam['starts_at']) > time()) {
+    flash('error','This exam has not started yet.'); redirect('/educore/dashboard.php');
+}
+
+// ── Visibility & access gate ──────────────────────────────────────────────────
+// Use COALESCE so missing columns (before migration) default safely
+$isHidden = (int)($exam['is_hidden'] ?? 0);
+$isOpen   = isset($exam['is_open']) ? (int)$exam['is_open'] : 1;
+if ($isHidden) { flash('error','This exam is not currently available.'); redirect('/educore/dashboard.php'); }
+if (!$isOpen)  { flash('error','The teacher has temporarily locked entry to this exam.'); redirect('/educore/dashboard.php'); }
 
 // Check group enrollment if exam has a group
 if ($exam['group_id']) {
@@ -257,6 +268,7 @@ include __DIR__ . '/../../templates/layout.php';
 </div>
 
 <?php
+$_csrfToken  = $_SESSION['csrf_token'] ?? '';
 $extraScripts = <<<JS
 <script>
 // Timer
@@ -307,6 +319,32 @@ document.querySelectorAll('.opt-label input:checked').forEach(inp => {
   inp.closest('.opt-label').style.borderColor = 'var(--accent)';
   inp.closest('.opt-label').style.background  = 'var(--accent-subtle)';
 });
+
+// ── Focus / blur tracking ─────────────────────────────────────────────────
+const _focusData = {
+  examId: {$eid},
+  subId:  {$submission['id']},
+  token:  '{$_csrfToken}'
+};
+
+function logFocusEvent(event) {
+  fetch('/educore/modules/exams/focus_log.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'exam_id=' + _focusData.examId
+        + '&submission_id=' + _focusData.subId
+        + '&event=' + encodeURIComponent(event)
+        + '&csrf_token=' + encodeURIComponent(_focusData.token),
+    keepalive: true
+  }).catch(()=>{});
+}
+
+// Detect tab switch / window minimize
+document.addEventListener('visibilitychange', () => {
+  logFocusEvent(document.hidden ? 'blur' : 'focus');
+});
+window.addEventListener('blur',  () => logFocusEvent('blur'));
+window.addEventListener('focus', () => logFocusEvent('focus'));
 </script>
 JS;
 include __DIR__ . '/../../templates/layout_end.php';
