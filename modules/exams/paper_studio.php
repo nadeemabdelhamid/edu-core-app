@@ -13,10 +13,8 @@ $breadcrumbs = [
     ['label'=>'Paper Studio'],
 ];
 
-// Load this center's closed/active exams to import from
 $examsStmt = $pdo->prepare("
-    SELECT e.id, e.title, e.type, g.name AS group_name,
-           COUNT(eq.id) AS q_count
+    SELECT e.id, e.title, e.type, g.name AS group_name, COUNT(eq.id) AS q_count
     FROM exams e
     LEFT JOIN `groups` g ON g.id=e.group_id
     LEFT JOIN exam_questions eq ON eq.exam_id=e.id
@@ -25,12 +23,10 @@ $examsStmt = $pdo->prepare("
 $examsStmt->execute([$cid]);
 $allExams = $examsStmt->fetchAll();
 
-// Load center info for default header
 $cStmt = $pdo->prepare("SELECT name FROM centers WHERE id=?");
 $cStmt->execute([$cid]);
 $center = $cStmt->fetch();
 
-// If loading from an exam
 $loadEid = (int)($_GET['exam'] ?? 0);
 $loadedExam = null;
 $loadedQuestions = [];
@@ -47,898 +43,1045 @@ if ($loadEid) {
 
 include __DIR__ . '/../../templates/layout.php';
 ?>
-
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <style>
-/* ── Studio layout ──────────────────────────────────────────── */
-.studio-wrap {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 0;
-  height: calc(100vh - 120px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--bg-card);
-}
+/* ── Studio shell ──────────────────────────────────────────── */
+.studio{display:grid;grid-template-columns:340px 1fr;height:calc(100vh - 118px);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
 
-/* ── Left panel ─────────────────────────────────────────────── */
-.studio-panel {
-  background: var(--bg-surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.panel-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elevated);
-  flex-shrink: 0;
-}
-.panel-tab {
-  flex: 1;
-  padding: 10px 6px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-align: center;
-  cursor: pointer;
-  color: var(--text-muted);
-  border-bottom: 2px solid transparent;
-  transition: all 0.15s;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.panel-tab.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--bg-surface); }
-.panel-section { display: none; flex: 1; overflow-y: auto; padding: 16px; }
-.panel-section.active { display: block; }
+/* Left panel */
+.sp{background:var(--bg-surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.sp-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg-elevated);flex-shrink:0}
+.sp-tab{flex:1;padding:9px 3px;font-size:.67rem;font-weight:700;text-align:center;cursor:pointer;color:var(--text-muted);border-bottom:2px solid transparent;text-transform:uppercase;letter-spacing:.05em;transition:all .15s}
+.sp-tab.on{color:var(--accent);border-bottom-color:var(--accent);background:var(--bg-surface)}
+.sp-sec{display:none;flex:1;overflow-y:auto;padding:13px}
+.sp-sec.on{display:block}
+.sf{margin-bottom:10px}
+.sf>label{display:block;font-size:.67rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.sf input,.sf select,.sf textarea{width:100%;font-size:.82rem}
+.sf textarea{resize:vertical;min-height:56px}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.sdv{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);padding:9px 0 5px;border-top:1px solid var(--border);margin-top:8px}
+.sdv:first-child{border-top:none;margin-top:0}
 
-/* Form controls inside panel */
-.studio-field { margin-bottom: 13px; }
-.studio-field label { display: block; font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
-.studio-field input,
-.studio-field select,
-.studio-field textarea { width: 100%; font-size: 0.84rem; }
-.studio-field textarea { resize: vertical; min-height: 60px; }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.studio-divider { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); padding: 10px 0 6px; border-top: 1px solid var(--border); margin-top: 10px; }
+/* Question list */
+.qi{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 10px;margin-bottom:7px;font-size:.81rem}
+.qi.sec-item{border-left:3px solid var(--accent)}
+.qi-head{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.qbadge{font-size:.61rem;padding:2px 6px;border-radius:3px;background:var(--bg-elevated);color:var(--text-muted);font-weight:700;text-transform:uppercase}
+.qbadge.sb{background:rgba(245,166,35,.15);color:var(--accent)}
+.qacts{display:flex;gap:3px;margin-left:auto}
+.qacts button{background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:.84rem;padding:2px 4px;border-radius:3px}
+.qacts button:hover{background:var(--bg-elevated);color:var(--danger)}
+.og{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:4px}
+.og input{font-size:.75rem}
 
-/* Question list in Questions tab */
-.q-item {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  cursor: default;
-  font-size: 0.82rem;
-}
-.q-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.q-badge { font-size: 0.64rem; padding: 2px 6px; border-radius: 3px; background: var(--bg-elevated); color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
-.q-drag { cursor: grab; color: var(--text-muted); font-size: 0.9rem; }
-.q-item input.q-text-input { font-size: 0.82rem; margin-bottom: 5px; }
-.q-add-btn { width: 100%; margin-top: 6px; font-size: 0.8rem; }
-.q-opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 5px; }
-.q-opt-grid input { font-size: 0.78rem; }
-.q-item-actions { display: flex; gap: 4px; margin-left: auto; }
-.q-item-actions button { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 0.9rem; padding: 2px 4px; border-radius: 3px; }
-.q-item-actions button:hover { background: var(--bg-elevated); color: var(--danger); }
+/* Rich-text toolbar */
+.rte{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:4px}
+.rtebar{display:flex;gap:1px;padding:3px 5px;background:var(--bg-elevated);border-bottom:1px solid var(--border)}
+.rtebar button{background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:.82rem;padding:2px 7px;border-radius:3px;line-height:1;font-family:serif}
+.rtebar button:hover,.rtebar button.on{background:var(--accent-subtle);color:var(--accent)}
+.rtebar .rsep{width:1px;background:var(--border);margin:1px 3px;align-self:stretch}
+.rtecont{min-height:32px;padding:5px 8px;font-size:.83rem;outline:none;background:var(--bg-card);color:var(--text-primary);line-height:1.4}
+.rtecont:empty::before{content:attr(data-ph);color:var(--text-muted);pointer-events:none;font-style:italic}
+.rtecont:focus{background:var(--bg-surface)}
 
 /* Import row */
-.import-row { display: flex; gap: 6px; margin-bottom: 12px; }
-.import-row select { flex: 1; font-size: 0.82rem; }
+.improw{display:flex;gap:6px;margin-bottom:9px}
+.improw select{flex:1;font-size:.81rem}
 
-/* ── Preview panel ──────────────────────────────────────────── */
-.studio-preview {
-  display: flex;
-  flex-direction: column;
-  background: #d4d4d8;
-  overflow: hidden;
-}
-.preview-toolbar {
-  background: #1e2330;
-  color: #f0f2f7;
-  padding: 8px 16px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-shrink: 0;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-}
-.preview-toolbar button {
-  background: var(--accent);
-  color: #000;
-  border: none;
-  padding: 6px 16px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-weight: 700;
-  font-size: 0.82rem;
-}
-.preview-toolbar button.sec { background: #333; color: #fff; }
-.preview-toolbar span { font-size: 0.8rem; color: #8892a4; }
-.preview-toolbar .spacer { flex: 1; }
-.preview-zoom { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #8892a4; }
-.preview-zoom button { background: #2d3347; color: #f0f2f7; padding: 3px 8px; border-radius: 4px; font-size: 0.78rem; }
-.preview-scroller {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  display: flex;
-  justify-content: center;
-}
-#paperPreview {
-  background: #fff;
-  color: #000;
-  box-shadow: 0 4px 28px rgba(0,0,0,0.25);
-  transform-origin: top center;
-  transition: transform 0.2s;
-  width: 210mm;
-  min-height: 297mm;
-  padding: 18mm 20mm;
-  font-size: 12pt;
-}
+/* Preview panel */
+.pv{display:flex;flex-direction:column;background:#c8cad0;overflow:hidden}
+.pvtop{background:#181d2b;color:#f0f2f7;padding:7px 13px;display:flex;gap:6px;align-items:center;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.06)}
+.ptabbar{display:flex;gap:3px}
+.ptab{padding:5px 12px;font-size:.7rem;font-weight:700;border:none;cursor:pointer;border-radius:4px 4px 0 0;background:#252c3f;color:#8892a4;text-transform:uppercase;letter-spacing:.04em}
+.ptab.on{background:#c8cad0;color:#181d2b}
+.sp8{flex:1}
+.zm{display:flex;align-items:center;gap:4px;font-size:.74rem;color:#8892a4}
+.zm button{background:#252c3f;color:#f0f2f7;border:none;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:.74rem}
+.pbtn{background:var(--accent);color:#000;border:none;padding:5px 13px;border-radius:5px;cursor:pointer;font-weight:700;font-size:.79rem;white-space:nowrap}
+.pbtn.s{background:#252c3f;color:#f0f2f7}
+.pvscroll{flex:1;overflow-y:auto;padding:16px;display:flex;justify-content:center;align-items:flex-start}
 
-/* ── Paper content styles ───────────────────────────────────── */
-#paperPreview * { box-sizing: border-box; }
-.pp-header { margin-bottom: 14px; padding-bottom: 10px; }
-.pp-logo-area { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
-.pp-logo-box { width: 52px; height: 52px; border: 2px solid #000; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; color: #888; flex-shrink: 0; }
-.pp-title-block { flex: 1; }
-.pp-center-name { font-size: 14pt; font-weight: 900; }
-.pp-exam-title  { font-size: 11pt; font-weight: 700; }
-.pp-subtitle    { font-size: 9pt; color: #555; }
-.pp-divider     { border: none; border-top: 2px solid #000; margin: 8px 0; }
-.pp-divider.thin { border-top-width: 1px; border-color: #888; }
-.pp-meta { display: grid; gap: 0; }
-.pp-meta-row { display: flex; border: 1px solid #ccc; font-size: 9.5pt; }
-.pp-meta-row:not(:last-child) { border-bottom: none; }
-.pp-meta-cell { flex: 1; padding: 4px 8px; border-right: 1px solid #ccc; }
-.pp-meta-cell:last-child { border-right: none; }
-.pp-meta-cell strong { display: block; font-size: 8pt; text-transform: uppercase; color: #777; }
-.pp-meta-val { font-weight: 600; }
-.pp-student-box { border: 1px solid #888; padding: 8px 12px; margin: 10px 0; display: grid; gap: 8px; }
-.pp-student-field { font-size: 9.5pt; }
-.pp-student-field span { display: block; font-size: 8pt; text-transform: uppercase; color: #777; margin-bottom: 2px; }
-.pp-student-line { border-bottom: 1px solid #000; height: 18px; }
-.pp-instructions { background: #f8f8f8; border-left: 3.5px solid #000; padding: 8px 12px; font-size: 9.5pt; margin: 10px 0; line-height: 1.55; }
-.pp-section { margin: 14px 0 8px; }
-.pp-section-title { font-size: 10.5pt; font-weight: 800; border-top: 1.5px solid #000; padding-top: 5px; margin-bottom: 8px; }
-.pp-question { margin-bottom: 14px; page-break-inside: avoid; }
-.pp-q-row { display: flex; gap: 6px; align-items: baseline; margin-bottom: 5px; }
-.pp-q-num { font-weight: 800; min-width: 24px; font-size: 10.5pt; }
-.pp-q-text { flex: 1; line-height: 1.5; font-size: 10.5pt; }
-.pp-q-pts { font-size: 8.5pt; color: #666; white-space: nowrap; }
-.pp-opts { list-style: none; padding-left: 24px; }
-.pp-opts.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
-.pp-opt { display: flex; gap: 8px; font-size: 9.5pt; padding: 2px 0; align-items: baseline; }
-.pp-opt-key { font-weight: 700; min-width: 16px; }
-.pp-tf { display: flex; gap: 22px; padding-left: 24px; font-size: 9.5pt; }
-.pp-circle { width: 12px; height: 12px; border: 1.5px solid #000; border-radius: 50%; display: inline-block; margin-right: 4px; vertical-align: middle; }
-.pp-lines { padding-left: 24px; margin-top: 4px; }
-.pp-line { border-bottom: 1px solid #aaa; height: 20px; margin-bottom: 5px; }
-.pp-scoring { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 14px; page-break-inside: avoid; }
-.pp-scoring td, .pp-scoring th { border: 1px solid #ccc; padding: 4px 7px; }
-.pp-scoring th { background: #f0f0f0; font-size: 8.5pt; text-transform: uppercase; }
-.pp-total { text-align: right; font-weight: 700; font-size: 10.5pt; border-top: 1.5px solid #000; padding-top: 6px; margin-top: 10px; }
-.pp-footer { font-size: 8pt; color: #888; text-align: center; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 6px; }
-.pp-watermark { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0.04; font-size: 72pt; font-weight: 900; transform: rotate(-35deg); white-space: nowrap; z-index: 1; }
+/* Paper shell */
+#pp{background:#fff;color:#000;box-shadow:0 4px 24px rgba(0,0,0,.28);transform-origin:top center;transition:transform .2s;width:210mm;min-height:297mm;padding:17mm 19mm;font-size:12pt;position:relative}
+
+/* ── Paper elements (shared preview+print) ── */
+.pp-wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:.04;font-size:64pt;font-weight:900;transform:rotate(-35deg);white-space:nowrap;z-index:0}
+.pp-hdr{padding-bottom:10px;margin-bottom:11px}
+.pp-cn{font-size:14pt;font-weight:900}.pp-et{font-size:11pt;font-weight:700}.pp-es{font-size:9pt;color:#555}
+.pp-lr{display:flex;align-items:center;gap:12px}
+.pp-lb{width:50px;height:50px;border:2px solid #000;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8pt;color:#888;flex-shrink:0}
+.pp-mr{display:flex;border:1px solid #ccc;margin-bottom:9px}
+.pp-mc{flex:1;padding:4px 8px;border-right:1px solid #ccc;font-size:9.5pt}
+.pp-mc:last-child{border-right:none}
+.pp-mc strong{display:block;font-size:7.5pt;text-transform:uppercase;color:#777}
+.pp-mc span{font-weight:600}
+.pp-sb{border:1px solid #888;padding:8px 12px;margin:9px 0;display:grid;gap:8px}
+.pp-sf{font-size:9.5pt}
+.pp-sf span{display:block;font-size:7.5pt;text-transform:uppercase;color:#777;margin-bottom:2px}
+.pp-sl{border-bottom:1px solid #000;height:18px}
+.pp-ins{background:#f8f8f8;border-left:3.5px solid #000;padding:8px 12px;font-size:9.5pt;margin:10px 0;line-height:1.55}
+.pp-secblock{margin:15px 0 9px;page-break-inside:avoid}
+.pp-sttl{font-size:11pt;font-weight:900;border-top:1.5px solid #000;padding-top:5px;margin-bottom:2px}
+.pp-ssub{font-size:9pt;color:#444;margin-bottom:3px}
+.pp-sinst{font-size:9pt;background:#f5f5f5;border-left:3px solid #ccc;padding:5px 10px;margin-bottom:5px;line-height:1.45}
+.pp-q{margin-bottom:12px;page-break-inside:avoid}
+.pp-qrow{display:flex;gap:6px;align-items:baseline;margin-bottom:4px}
+.pp-qn{font-weight:900;min-width:22px;font-size:10.5pt}
+.pp-qt{flex:1;line-height:1.5;font-size:10.5pt}
+.pp-qp{font-size:8.5pt;color:#666;white-space:nowrap}
+.pp-opts{list-style:none;padding-left:22px}
+.pp-opts.tc{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px}
+.pp-opt{display:flex;gap:6px;font-size:9.5pt;padding:2px 0;align-items:baseline}
+.pp-ok{font-weight:700;min-width:14px}
+.pp-tf{display:flex;gap:20px;padding-left:22px;font-size:9.5pt;margin-top:4px}
+.pp-circ{width:12px;height:12px;border:1.5px solid #000;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle}
+.pp-lines{padding-left:22px;margin-top:4px}
+.pp-line{border-bottom:1px solid #aaa;height:20px;margin-bottom:5px}
+.pp-tbl{width:100%;border-collapse:collapse;font-size:9.5pt;margin-top:12px;page-break-inside:avoid}
+.pp-tbl td,.pp-tbl th{border:1px solid #ccc;padding:4px 7px}
+.pp-tbl th{background:#f0f0f0;font-size:8pt;text-transform:uppercase}
+.pp-tot{text-align:right;font-weight:700;font-size:10.5pt;border-top:1.5px solid #000;padding-top:5px;margin-top:8px}
+.pp-ftr{font-size:8pt;color:#888;text-align:center;margin-top:16px;border-top:1px solid #ddd;padding-top:5px}
+/* Instruction page */
+.ip-ttl{font-size:13pt;font-weight:900;text-align:center;border:2px solid #000;padding:8px;margin-bottom:13px;letter-spacing:.04em}
+.ip-sec{margin-bottom:13px}
+.ip-sec h3{font-size:10.5pt;font-weight:800;margin-bottom:5px;border-bottom:1px solid #ddd;padding-bottom:3px}
+.ip-sec p,.ip-sec li{font-size:9.5pt;line-height:1.65;margin-bottom:3px}
+.ip-sec ul,.ip-sec ol{padding-left:18px}
+.ip-sig{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px;border-top:1px solid #ccc;padding-top:10px}
+.ip-sfl{font-size:9pt}
+.ip-sfl span{display:block;font-size:7.5pt;text-transform:uppercase;color:#777;margin-bottom:2px}
+.ip-sfl .pp-sl{height:18px}
+/* Bubble sheet */
+.bs-ttl{font-size:12pt;font-weight:900;text-align:center;border:2px solid #000;padding:7px;margin-bottom:11px}
+.bs-info{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px;font-size:9.5pt}
+.bs-fld span{display:block;font-size:7.5pt;text-transform:uppercase;color:#777;margin-bottom:2px}
+.bs-fld .pp-sl{height:17px}
+.bs-row{display:flex;align-items:center;margin-bottom:3px}
+.bs-num{min-width:26px;font-weight:700;text-align:right;padding-right:7px;font-size:8pt;color:#555}
+.bs-bub{width:17px;height:17px;border:1.5px solid #000;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:6pt;font-weight:700;margin:0 2px}
+.bs-bub.filled{background:#000;color:#fff}
+.bs-leg{display:flex;align-items:center;gap:10px;font-size:8pt;margin-bottom:7px;color:#555}
+/* RTL */
+.pp-rtl{direction:rtl;text-align:right}
+.pp-rtl .pp-ins{border-left:none;border-right:3.5px solid #000}
+.pp-rtl .pp-sinst{border-left:none;border-right:3px solid #ccc}
+.pp-rtl .pp-opts,.pp-rtl .pp-tf,.pp-rtl .pp-lines{padding-left:0;padding-right:22px}
+.pp-rtl .pp-tot{text-align:left}
 </style>
 
-<div class="page-header" style="margin-bottom:14px;">
+<div class="page-header" style="margin-bottom:12px;">
   <div>
     <h1 class="page-title">📄 Paper Studio</h1>
-    <p class="page-subtitle">Design and print professional exam papers — no Word needed</p>
+    <p class="page-subtitle">Design &amp; print professional exam papers — Arabic, bubble sheets, rich text</p>
   </div>
   <a href="index.php" class="btn btn-ghost btn-sm">← Exams</a>
 </div>
 
-<!-- Studio -->
-<div class="studio-wrap">
+<div class="studio">
 
-  <!-- ── LEFT PANEL ── -->
-  <div class="studio-panel">
-    <div class="panel-tabs">
-      <div class="panel-tab active" onclick="switchTab('setup')">Setup</div>
-      <div class="panel-tab" onclick="switchTab('questions')">Questions</div>
-      <div class="panel-tab" onclick="switchTab('layout')">Layout</div>
+  <!-- ══ LEFT PANEL ══════════════════════════════════════ -->
+  <div class="sp">
+    <div class="sp-tabs">
+      <div class="sp-tab on"  onclick="tab('setup')">Setup</div>
+      <div class="sp-tab"     onclick="tab('questions')">Questions</div>
+      <div class="sp-tab"     onclick="tab('layout')">Layout</div>
+      <div class="sp-tab"     onclick="tab('pages')">Pages</div>
     </div>
 
-    <!-- SETUP TAB -->
-    <div class="panel-section active" id="tab-setup">
-
-      <div class="studio-divider">📥 Import from Exam</div>
-      <div class="import-row">
-        <select id="importSelect">
-          <option value="">— choose an exam —</option>
-          <?php foreach ($allExams as $ex): ?>
-          <option value="<?=$ex['id']?>"><?=sanitize($ex['title'])?> (<?=$ex['q_count']?> q)</option>
+    <!-- SETUP -->
+    <div class="sp-sec on" id="t-setup">
+      <div class="sdv">📥 Import from Exam</div>
+      <div class="improw">
+        <select id="s_imp"><option value="">— choose exam —</option>
+          <?php foreach($allExams as $ex): ?>
+          <option value="<?=$ex['id']?>"><?=sanitize($ex['title'])?> (<?=$ex['q_count']?>q)</option>
           <?php endforeach; ?>
         </select>
-        <button class="btn btn-accent btn-sm" onclick="importExam()">Load</button>
+        <button class="btn btn-accent btn-sm" onclick="doImport()">Load</button>
       </div>
 
-      <div class="studio-divider">🏫 Header</div>
-      <div class="studio-field">
-        <label>Center / School Name</label>
-        <input type="text" id="s_center" class="form-control" value="<?=sanitize($center['name']??'')?>" oninput="render()">
+      <div class="sdv">🌐 Language</div>
+      <div class="sf"><label>Direction / Language</label>
+        <select id="s_lang" class="form-control" onchange="onLang()">
+          <option value="en">English — LTR</option>
+          <option value="ar">العربية — RTL</option>
+          <option value="bi">Bilingual (EN + AR)</option>
+        </select>
       </div>
-      <div class="studio-field">
-        <label>Exam Title</label>
-        <input type="text" id="s_title" class="form-control" value="<?=sanitize($loadedExam['title']??'')?>" oninput="render()" placeholder="e.g. Mid-Year Mathematics Exam">
+      <div class="sf" id="arfontRow" style="display:none"><label>Arabic Font</label>
+        <select id="s_arf" class="form-control" onchange="render()">
+          <option value="Cairo">Cairo (Modern)</option>
+          <option value="Amiri">Amiri (Classical)</option>
+        </select>
       </div>
-      <div class="field-row">
-        <div class="studio-field">
-          <label>Subject / Grade</label>
-          <input type="text" id="s_subject" class="form-control" value="<?=sanitize($loadedExam['group_name']??'')?>" oninput="render()" placeholder="Grade 8">
+
+      <div class="sdv">🏫 Header</div>
+      <div class="sf"><label>Center / School Name</label>
+        <input type="text" id="s_cen" class="form-control" value="<?=sanitize($center['name']??'')?>" oninput="render()">
+      </div>
+      <div class="sf" id="cen_ar_row" style="display:none"><label>اسم المركز (عربي)</label>
+        <input type="text" id="s_cen_ar" class="form-control" dir="rtl" style="font-family:'Cairo',sans-serif" oninput="render()" placeholder="اسم المركز">
+      </div>
+      <div class="sf"><label>Exam Title</label>
+        <input type="text" id="s_ttl" class="form-control" value="<?=sanitize($loadedExam['title']??'')?>" oninput="render()" placeholder="Mid-Year Mathematics">
+      </div>
+      <div class="sf" id="ttl_ar_row" style="display:none"><label>عنوان الامتحان (عربي)</label>
+        <input type="text" id="s_ttl_ar" class="form-control" dir="rtl" style="font-family:'Cairo',sans-serif" oninput="render()" placeholder="امتحان منتصف الفصل">
+      </div>
+      <div class="fr">
+        <div class="sf"><label>Subject / Grade</label>
+          <input type="text" id="s_subj" class="form-control" value="<?=sanitize($loadedExam['group_name']??'')?>" oninput="render()" placeholder="Grade 8">
         </div>
-        <div class="studio-field">
-          <label>Date</label>
-          <input type="text" id="s_date" class="form-control" value="<?=date('F j, Y')?>" oninput="render()">
+        <div class="sf"><label>Date</label>
+          <input type="text" id="s_date" class="form-control" value="<?=date('d/m/Y')?>" oninput="render()">
         </div>
       </div>
 
-      <div class="studio-divider">⏱ Exam Info</div>
-      <div class="field-row">
-        <div class="studio-field">
-          <label>Duration (min)</label>
-          <input type="number" id="s_duration" class="form-control" value="<?=$loadedExam['duration_minutes']??60?>" oninput="render()">
+      <div class="sdv">⏱ Exam Info</div>
+      <div class="fr">
+        <div class="sf"><label>Duration (min)</label>
+          <input type="number" id="s_dur" class="form-control" value="<?=$loadedExam['duration_minutes']??60?>" oninput="render()">
         </div>
-        <div class="studio-field">
-          <label>Total Points</label>
-          <input type="number" id="s_points" class="form-control" value="<?=$loadedExam['total_points']??100?>" oninput="render()">
+        <div class="sf"><label>Total Points</label>
+          <input type="number" id="s_pts" class="form-control" value="<?=$loadedExam['total_points']??100?>" oninput="render()">
         </div>
       </div>
-      <div class="field-row">
-        <div class="studio-field">
-          <label>Term / Semester</label>
+      <div class="fr">
+        <div class="sf"><label>Term</label>
           <input type="text" id="s_term" class="form-control" placeholder="Term 1" oninput="render()">
         </div>
-        <div class="studio-field">
-          <label>Academic Year</label>
-          <input type="text" id="s_year" class="form-control" value="<?=date('Y').'/'.(date('Y')+1)?>" oninput="render()">
+        <div class="sf"><label>Year</label>
+          <input type="text" id="s_yr" class="form-control" value="<?=date('Y').'/'.(date('Y')+1)?>" oninput="render()">
         </div>
       </div>
 
-      <div class="studio-divider">📋 Instructions</div>
-      <div class="studio-field">
-        <textarea id="s_instructions" class="form-control" oninput="render()" placeholder="Write clearly. No calculators. Each question carries the stated marks…"><?=sanitize($loadedExam['instructions']??'')?></textarea>
+      <div class="sdv">📋 General Instructions</div>
+      <div class="sf">
+        <textarea id="s_ins" class="form-control" oninput="render()" placeholder="Write in blue ink. No phones…"><?=sanitize($loadedExam['instructions']??'')?></textarea>
       </div>
 
-      <div class="studio-divider">📦 Student Box Fields</div>
-      <div class="studio-field">
-        <label>Fields to show</label>
-        <div style="display:flex;flex-direction:column;gap:5px;font-size:0.82rem;">
-          <?php foreach (['Name','Student ID','Class / Group','Score'] as $f): ?>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400;">
-            <input type="checkbox" class="sfield" value="<?=$f?>" checked onchange="render()"> <?=$f?>
-          </label>
-          <?php endforeach; ?>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400;">
-            <input type="checkbox" class="sfield" value="Signature" onchange="render()"> Signature
-          </label>
-        </div>
+      <div class="sdv">📦 Student Box</div>
+      <div class="sf">
+        <?php foreach(['Name','Student ID','Class / Group','Score','Signature'] as $f): ?>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.81rem;text-transform:none;letter-spacing:0;font-weight:400;margin-bottom:4px;cursor:pointer;">
+          <input type="checkbox" class="sfield" value="<?=$f?>" <?=$f!=='Signature'?'checked':''?> onchange="render()"> <?=$f?>
+        </label>
+        <?php endforeach; ?>
       </div>
 
-      <div class="studio-divider">🔖 Footer</div>
-      <div class="studio-field">
-        <input type="text" id="s_footer" class="form-control" placeholder="Good luck! · Page {page}" oninput="render()" value="">
+      <div class="sdv">🔖 Footer</div>
+      <div class="sf">
+        <input type="text" id="s_ftr" class="form-control" placeholder="Good luck! / حظ موفق" oninput="render()">
       </div>
     </div>
 
-    <!-- QUESTIONS TAB -->
-    <div class="panel-section" id="tab-questions">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <span style="font-size:0.78rem;color:var(--text-muted);font-weight:600;">QUESTIONS <span id="qCount" style="color:var(--accent);">0</span></span>
-        <div style="display:flex;gap:5px;">
-          <button class="btn btn-sm btn-ghost" onclick="addQuestion('mcq')" title="Add MCQ">+MCQ</button>
-          <button class="btn btn-sm btn-ghost" onclick="addQuestion('tf')" title="True/False">+T/F</button>
-          <button class="btn btn-sm btn-ghost" onclick="addQuestion('sa')" title="Short Answer">+SA</button>
-          <button class="btn btn-sm btn-ghost" onclick="addQuestion('essay')" title="Essay">+Essay</button>
+    <!-- QUESTIONS -->
+    <div class="sp-sec" id="t-questions">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:.74rem;color:var(--text-muted);font-weight:700;">
+          ITEMS &nbsp;<span id="qcnt" style="color:var(--accent);">0</span>
+        </span>
+        <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btn btn-sm btn-ghost" onclick="addItem('section')" style="color:var(--accent);font-weight:700;">§ Section</button>
+          <button class="btn btn-sm btn-ghost" onclick="addItem('mcq')">+MCQ</button>
+          <button class="btn btn-sm btn-ghost" onclick="addItem('tf')">+T/F</button>
+          <button class="btn btn-sm btn-ghost" onclick="addItem('sa')">+SA</button>
+          <button class="btn btn-sm btn-ghost" onclick="addItem('essay')">+Essay</button>
         </div>
       </div>
-      <div id="questionList"></div>
-      <div id="noQMsg" style="text-align:center;padding:24px 12px;color:var(--text-muted);font-size:0.82rem;">
-        No questions yet.<br>Add manually or import from an exam above.
+      <div id="qlist"></div>
+      <div id="qempty" style="text-align:center;padding:20px 8px;color:var(--text-muted);font-size:.8rem;">
+        No items yet. Add a <strong>§ Section</strong><br>then questions, or import from an exam.
       </div>
     </div>
 
-    <!-- LAYOUT TAB -->
-    <div class="panel-section" id="tab-layout">
-
-      <div class="studio-divider">🎨 Typography</div>
-      <div class="studio-field">
-        <label>Paper Font</label>
+    <!-- LAYOUT -->
+    <div class="sp-sec" id="t-layout">
+      <div class="sdv">🎨 Typography</div>
+      <div class="sf"><label>English Font</label>
         <select id="l_font" class="form-control" onchange="render()">
-          <option value="'Times New Roman',serif">Times New Roman (Classic)</option>
-          <option value="'Georgia',serif">Georgia (Readable)</option>
-          <option value="Arial,sans-serif">Arial (Clean)</option>
-          <option value="'Calibri',sans-serif">Calibri (Modern)</option>
-          <option value="'Courier New',monospace">Courier New (Typewriter)</option>
+          <option value="'Times New Roman',serif">Times New Roman</option>
+          <option value="Georgia,serif">Georgia</option>
+          <option value="Arial,sans-serif">Arial</option>
+          <option value="'Calibri',sans-serif">Calibri</option>
+          <option value="'Courier New',monospace">Courier New</option>
         </select>
       </div>
-      <div class="field-row">
-        <div class="studio-field">
-          <label>Base Font Size</label>
-          <select id="l_fsize" class="form-control" onchange="render()">
-            <option value="10pt">10pt (Compact)</option>
-            <option value="11pt">11pt</option>
-            <option value="12pt" selected>12pt (Standard)</option>
-            <option value="13pt">13pt (Large)</option>
+      <div class="fr">
+        <div class="sf"><label>Font Size</label>
+          <select id="l_fs" class="form-control" onchange="render()">
+            <option value="10pt">10pt</option><option value="11pt">11pt</option>
+            <option value="12pt" selected>12pt</option><option value="13pt">13pt</option>
           </select>
         </div>
-        <div class="studio-field">
-          <label>Line Spacing</label>
+        <div class="sf"><label>Line Spacing</label>
           <select id="l_lh" class="form-control" onchange="render()">
-            <option value="1.3">Tight (1.3)</option>
-            <option value="1.5" selected>Normal (1.5)</option>
-            <option value="1.8">Relaxed (1.8)</option>
-            <option value="2.0">Double (2.0)</option>
+            <option value="1.3">Tight</option><option value="1.5" selected>Normal</option>
+            <option value="1.8">Relaxed</option><option value="2.0">Double</option>
           </select>
         </div>
       </div>
 
-      <div class="studio-divider">🖼 Header Style</div>
-      <div class="studio-field">
-        <label>Header Layout</label>
-        <select id="l_header" class="form-control" onchange="render()">
-          <option value="centered">Centered (Classic)</option>
-          <option value="logo-left">Logo Left + Text</option>
-          <option value="split">Split (Title left · Date right)</option>
-          <option value="minimal">Minimal (Title only)</option>
-        </select>
+      <div class="sdv">🖼 Header</div>
+      <div class="fr">
+        <div class="sf"><label>Layout</label>
+          <select id="l_hdr" class="form-control" onchange="render()">
+            <option value="centered">Centered</option>
+            <option value="logo">Logo + Text</option>
+            <option value="split">Split</option>
+            <option value="minimal">Minimal</option>
+          </select>
+        </div>
+        <div class="sf"><label>Divider</label>
+          <select id="l_dvd" class="form-control" onchange="render()">
+            <option value="double">Double</option>
+            <option value="single">Single</option>
+            <option value="thick">Thick</option>
+            <option value="none">None</option>
+          </select>
+        </div>
       </div>
-      <div class="studio-field">
-        <label>Divider Style</label>
-        <select id="l_divider" class="form-control" onchange="render()">
-          <option value="double">Double Line</option>
-          <option value="single">Single Line</option>
-          <option value="thick">Thick Line</option>
+
+      <div class="sdv">❓ Questions</div>
+      <div class="fr">
+        <div class="sf"><label>MCQ Options</label>
+          <select id="l_opt" class="form-control" onchange="render()">
+            <option value="tc">2 Columns</option>
+            <option value="">1 Column</option>
+          </select>
+        </div>
+        <div class="sf"><label>Q Numbering</label>
+          <select id="l_num" class="form-control" onchange="render()">
+            <option value="seq">Sequential</option>
+            <option value="ps">Per Section</option>
+          </select>
+        </div>
+      </div>
+      <div class="fr">
+        <div class="sf"><label>SA Lines</label>
+          <select id="l_sal" class="form-control" onchange="render()">
+            <option value="2">2</option><option value="3" selected>3</option>
+            <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+          </select>
+        </div>
+        <div class="sf"><label>Essay Lines</label>
+          <select id="l_esl" class="form-control" onchange="render()">
+            <option value="6">6</option><option value="8" selected>8</option>
+            <option value="10">10</option><option value="12">12</option><option value="15">15</option>
+          </select>
+        </div>
+      </div>
+      <div class="fr">
+        <div class="sf"><label>Show Points</label>
+          <select id="l_sp" class="form-control" onchange="render()">
+            <option value="1">Yes</option><option value="0">No</option>
+          </select>
+        </div>
+        <div class="sf"><label>Answer Key</label>
+          <select id="l_ak" class="form-control" onchange="render()">
+            <option value="0">No</option><option value="1">At End</option>
+          </select>
+        </div>
+      </div>
+      <div class="sf"><label>Scoring Table</label>
+        <select id="l_scr" class="form-control" onchange="render()">
           <option value="none">None</option>
+          <option value="simple">Per Question</option>
+          <option value="sec">By Section</option>
         </select>
       </div>
 
-      <div class="studio-divider">❓ Question Layout</div>
-      <div class="studio-field">
-        <label>MCQ Options Layout</label>
-        <select id="l_opts" class="form-control" onchange="render()">
-          <option value="two-col">2 Columns</option>
-          <option value="one-col">1 Column (Stacked)</option>
-        </select>
+      <div class="sdv">🔒 Watermark</div>
+      <div class="sf">
+        <input type="text" id="l_wm" class="form-control" placeholder="DRAFT / مسودة / blank = none" oninput="render()">
       </div>
-      <div class="studio-field">
-        <label>Answer Lines (Short Answer)</label>
-        <select id="l_salines" class="form-control" onchange="render()">
-          <option value="2">2 lines</option>
-          <option value="3" selected>3 lines</option>
-          <option value="4">4 lines</option>
-          <option value="5">5 lines</option>
-          <option value="6">6 lines</option>
-        </select>
-      </div>
-      <div class="studio-field">
-        <label>Essay Lines</label>
-        <select id="l_essaylines" class="form-control" onchange="render()">
-          <option value="6">6 lines</option>
-          <option value="8" selected>8 lines</option>
-          <option value="10">10 lines</option>
-          <option value="12">12 lines</option>
-          <option value="15">15 lines</option>
-        </select>
-      </div>
-      <div class="studio-field">
-        <label>Show Points per Question</label>
-        <select id="l_showpts" class="form-control" onchange="render()">
-          <option value="1">Yes</option>
+    </div>
+
+    <!-- PAGES -->
+    <div class="sp-sec" id="t-pages">
+
+      <div class="sdv">📄 Instructions Page</div>
+      <div class="sf"><label>Include Instructions Page</label>
+        <select id="p_ip" class="form-control" onchange="onPageToggle()">
           <option value="0">No</option>
+          <option value="1">Yes — before exam questions</option>
         </select>
       </div>
-      <div class="studio-field">
-        <label>Number Questions</label>
-        <select id="l_qnum" class="form-control" onchange="render()">
-          <option value="seq">Sequential (1, 2, 3…)</option>
-          <option value="per-section">Per-Section (1, 2… then 1, 2…)</option>
-        </select>
+      <div id="ip_fields" style="opacity:.4">
+        <div class="sf"><label>Page Title</label>
+          <input type="text" id="p_iptl" class="form-control" value="General Instructions" oninput="render()">
+        </div>
+        <div class="sf"><label>General Rules <span style="font-weight:400;text-transform:none;">(one per line)</span></label>
+          <textarea id="p_grls" class="form-control" oninput="render()" rows="4" placeholder="Mobile phones are not allowed&#10;Write in blue or black pen&#10;Do not leave any question unanswered"></textarea>
+        </div>
+        <div class="sf"><label>MCQ Instructions</label>
+          <textarea id="p_mcqi" class="form-control" oninput="render()" placeholder="Circle the letter of the correct answer."></textarea>
+        </div>
+        <div class="sf"><label>Short Answer Instructions</label>
+          <textarea id="p_sai" class="form-control" oninput="render()" placeholder="Write your answer on the lines below."></textarea>
+        </div>
+        <div class="sf"><label>Academic Integrity Statement</label>
+          <textarea id="p_ais" class="form-control" oninput="render()" placeholder="I confirm that all answers are my own work…"></textarea>
+        </div>
+        <div class="sf"><label>Signature Strip</label>
+          <select id="p_ipsig" class="form-control" onchange="render()">
+            <option value="1">Yes</option><option value="0">No</option>
+          </select>
+        </div>
       </div>
-      <div class="studio-field">
-        <label>Show Answer Key Section</label>
-        <select id="l_anskey" class="form-control" onchange="render()">
+
+      <div class="sdv">⭕ Bubble Answer Sheet</div>
+      <div class="sf"><label>Include Bubble Sheet</label>
+        <select id="p_bs" class="form-control" onchange="onPageToggle()">
           <option value="0">No</option>
-          <option value="1">Yes (at end)</option>
+          <option value="1">Yes — after exam</option>
+          <option value="sep">Separate standalone page</option>
         </select>
       </div>
-
-      <div class="studio-divider">📊 Scoring Table</div>
-      <div class="studio-field">
-        <label>Show Scoring Table</label>
-        <select id="l_scoring" class="form-control" onchange="render()">
-          <option value="none">None</option>
-          <option value="simple">Simple (Q# | Points | Score)</option>
-          <option value="bytype">By Question Type</option>
-        </select>
+      <div id="bs_fields" style="opacity:.4">
+        <div class="fr">
+          <div class="sf"><label>Choices per Q</label>
+            <select id="p_bch" class="form-control" onchange="render()">
+              <option value="4">A B C D</option>
+              <option value="5">A B C D E</option>
+              <option value="3">A B C</option>
+            </select>
+          </div>
+          <div class="sf"><label>Columns</label>
+            <select id="p_bcl" class="form-control" onchange="render()">
+              <option value="2">2</option><option value="3">3</option><option value="1">1</option>
+            </select>
+          </div>
+        </div>
+        <div class="fr">
+          <div class="sf"><label>Override Q count</label>
+            <input type="number" id="p_bqc" class="form-control" value="0" min="0" max="120" oninput="render()" placeholder="0 = auto">
+          </div>
+          <div class="sf"><label>Show example</label>
+            <select id="p_bex" class="form-control" onchange="render()">
+              <option value="1">Yes</option><option value="0">No</option>
+            </select>
+          </div>
+        </div>
       </div>
 
-      <div class="studio-divider">🔒 Watermark</div>
-      <div class="studio-field">
-        <label>Watermark Text</label>
-        <input type="text" id="l_watermark" class="form-control" placeholder="DRAFT / CONFIDENTIAL / blank to hide" oninput="render()">
-      </div>
     </div>
   </div>
 
-  <!-- ── RIGHT PREVIEW ── -->
-  <div class="studio-preview">
-    <div class="preview-toolbar">
-      <span>Live Preview</span>
-      <div class="spacer"></div>
-      <div class="preview-zoom">
+  <!-- ══ RIGHT PREVIEW ══════════════════════════════════════ -->
+  <div class="pv">
+    <div class="pvtop">
+      <div class="ptabbar">
+        <button class="ptab on" id="tab-exam"   onclick="showPg('exam')">📝 Exam</button>
+        <button class="ptab"    id="tab-instr"  onclick="showPg('instr')">📋 Instructions</button>
+        <button class="ptab"    id="tab-bubble" onclick="showPg('bubble')">⭕ Bubble Sheet</button>
+      </div>
+      <div class="sp8"></div>
+      <div class="zm">
         <span>Zoom</span>
-        <button onclick="zoom(-0.1)">−</button>
-        <span id="zoomLabel">100%</span>
-        <button onclick="zoom(0.1)">+</button>
-        <button onclick="zoom(0,'fit')">Fit</button>
+        <button onclick="zm(-0.1)">−</button>
+        <span id="zmlbl">85%</span>
+        <button onclick="zm(0.1)">+</button>
+        <button onclick="zm(0,'fit')">Fit</button>
       </div>
-      <button class="sec" onclick="printPaper(false)">🖨 Print / Save PDF</button>
-      <button onclick="printPaper(true)">🔑 Print with Answer Key</button>
+      <button class="pbtn s" onclick="doPrint(false)">🖨 Print All</button>
+      <button class="pbtn"   onclick="doPrint(true)">🔑 Print + Key</button>
     </div>
-    <div class="preview-scroller" id="previewScroller">
-      <div id="paperPreview">
-        <!-- Rendered by JS -->
-      </div>
+    <div class="pvscroll" id="pvs">
+      <div id="pp"></div>
     </div>
   </div>
 </div>
 
-<!-- Hidden print container (clean output) -->
-<div id="printFrame" style="display:none;"></div>
-
 <script>
-// ── State ──────────────────────────────────────────────────────
-let questions = [];
-let qIdSeq    = 0;
-let zoomLevel = 0.85;
+// ══ State ═════════════════════════════════════════════════════
+let items  = [];
+let idSeq  = 0;
+let zmLvl  = 0.85;
+let curPg  = 'exam';
 
-// Pre-load questions if imported from URL
-<?php if ($loadedQuestions): ?>
-questions = <?=json_encode(array_map(function($q) {
-    return [
-        'id'   => $q['id'],
-        'type' => $q['type'] === 'true_false' ? 'tf' : ($q['type'] === 'short_answer' ? 'sa' : 'mcq'),
-        'text' => $q['question'],
-        'opts' => [$q['option_a'],$q['option_b'],$q['option_c'],$q['option_d']],
-        'answer' => $q['correct_answer'],
-        'pts'  => $q['points'],
-    ];
-}, $loadedQuestions))?>;
-qIdSeq = questions.length;
+<?php if($loadedQuestions): ?>
+items = <?=json_encode(array_map(function($q){
+  return ['id'=>$q['id'],'type'=>$q['type']==='true_false'?'tf':($q['type']==='short_answer'?'sa':$q['type']),'text'=>$q['question'],'opts'=>[$q['option_a'],$q['option_b'],$q['option_c'],$q['option_d']],'answer'=>$q['correct_answer'],'pts'=>$q['points']];
+},$loadedQuestions))?>;
+idSeq = items.length;
 <?php endif; ?>
 
-// ── Helpers ────────────────────────────────────────────────────
-function g(id) { return document.getElementById(id); }
-function gv(id) { return (g(id)?.value ?? '').trim(); }
+// ══ Utils ═════════════════════════════════════════════════════
+const G  = id => document.getElementById(id);
+const GV = id => (G(id)?.value??'').trim();
+const esc= s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+const dvd= s => s==='double'?'3px double #000':s==='thick'?'3px solid #000':s==='single'?'1.5px solid #000':'none';
 
-function switchTab(name) {
-    document.querySelectorAll('.panel-tab').forEach((t,i)=>t.classList.toggle('active', ['setup','questions','layout'][i]===name));
-    document.querySelectorAll('.panel-section').forEach(s=>s.classList.remove('active'));
-    g('tab-'+name).classList.add('active');
+// ══ Tab / page switching ══════════════════════════════════════
+function tab(name){
+  document.querySelectorAll('.sp-tab').forEach((t,i)=>t.classList.toggle('on',['setup','questions','layout','pages'][i]===name));
+  document.querySelectorAll('.sp-sec').forEach(s=>s.classList.remove('on'));
+  G('t-'+name).classList.add('on');
+}
+function showPg(name){
+  curPg = name;
+  document.querySelectorAll('.ptab').forEach(b=>b.classList.remove('on'));
+  G('tab-'+name).classList.add('on');
+  render();
 }
 
-// ── Zoom ───────────────────────────────────────────────────────
-function zoom(delta, mode) {
-    if (mode === 'fit') {
-        const w = g('previewScroller').clientWidth - 48;
-        zoomLevel = Math.min(1, w / 794); // 210mm ≈ 794px
+// ══ Zoom ══════════════════════════════════════════════════════
+function zm(d,mode){
+  if(mode==='fit'){ const w=G('pvs').clientWidth-36; zmLvl=Math.min(1,w/794); }
+  else zmLvl=Math.max(0.35,Math.min(1.5,zmLvl+d));
+  G('pp').style.transform=`scale(${zmLvl})`;
+  G('zmlbl').textContent=Math.round(zmLvl*100)+'%';
+}
+
+// ══ Language ══════════════════════════════════════════════════
+function onLang(){
+  const l=GV('s_lang'), ar=l==='ar'||l==='bi';
+  G('arfontRow').style.display  = ar?'block':'none';
+  G('cen_ar_row').style.display = l==='bi'?'block':'none';
+  G('ttl_ar_row').style.display = l==='bi'?'block':'none';
+  render();
+}
+G('s_lang').addEventListener('change',onLang);
+
+// ══ Import ════════════════════════════════════════════════════
+function doImport(){ const v=GV('s_imp'); if(v) window.location.href='?exam='+v; }
+
+// ══ Page toggles ══════════════════════════════════════════════
+function onPageToggle(){
+  G('ip_fields').style.opacity = GV('p_ip')==='1'?'1':'0.4';
+  G('bs_fields').style.opacity = GV('p_bs')!=='0'?'1':'0.4';
+  render();
+}
+
+// ══ Rich Text Editor ══════════════════════════════════════════
+function makeRTE(item, field, ph){
+  const uid = `rte_${item.id}_${field}`;
+  const lang = GV('s_lang');
+  const dir  = lang==='ar'?'rtl':'ltr';
+  const af   = GV('s_arf')||'Cairo';
+  const fstyle= lang==='ar'?`font-family:'${af}',sans-serif;`:'';
+  return `<div class="rte" id="wrap_${uid}">
+    <div class="rtebar">
+      <button type="button" title="bold"      onclick="rc('${uid}','bold')"><b>B</b></button>
+      <button type="button" title="italic"    onclick="rc('${uid}','italic')"><i>I</i></button>
+      <button type="button" title="underline" onclick="rc('${uid}','underline')"><u>U</u></button>
+      <div class="rsep"></div>
+      <button type="button" title="clear" onclick="rclr('${uid}')" style="font-size:.68rem;font-family:sans-serif;">✕</button>
+    </div>
+    <div class="rtecont" id="${uid}" contenteditable="true"
+         dir="${dir}" style="${fstyle}"
+         data-item="${item.id}" data-field="${field}" data-ph="${ph||'Enter text…'}"
+         oninput="rsync(this)" onfocus="rhlt(this)"
+    >${item[field]||''}</div>
+  </div>`;
+}
+
+function rc(uid, cmd){
+  const el=G(uid); if(!el) return;
+  el.focus(); document.execCommand(cmd,false,null); rsync(el); rhlt(el);
+}
+function rclr(uid){ const el=G(uid); if(!el) return; el.innerHTML=''; rsync(el); }
+function rsync(el){
+  const item=items.find(i=>i.id===parseInt(el.dataset.item));
+  if(item) item[el.dataset.field]=el.innerHTML;
+  render();
+}
+function rhlt(el){
+  const bar=el.closest('.rte')?.querySelector('.rtebar');
+  if(!bar) return;
+  ['bold','italic','underline'].forEach(c=>{
+    const btn=bar.querySelector(`[title="${c}"]`);
+    if(btn) btn.classList.toggle('on',document.queryCommandState(c));
+  });
+}
+
+// ══ Item CRUD ══════════════════════════════════════════════════
+function addItem(type,data){
+  const item = data||(type==='section'
+    ?{id:++idSeq,type:'section',title:'',subtitle:'',inst:'',pts:0}
+    :{id:++idSeq,type,text:'',opts:type==='mcq'?['','','','']:[],answer:'',pts:1});
+  items.push(item);
+  buildList(); render(); tab('questions');
+  setTimeout(()=>{ const l=G('qlist'); if(l) l.scrollTop=l.scrollHeight; },50);
+}
+
+function rmItem(id){ items=items.filter(i=>i.id!=id); buildList(); render(); }
+
+function mvItem(id,d){
+  const i=items.findIndex(i=>i.id==id); if(i<0) return;
+  const j=i+d; if(j<0||j>=items.length) return;
+  [items[i],items[j]]=[items[j],items[i]]; buildList(); render();
+}
+
+function upd(id,field,val){
+  const item=items.find(i=>i.id==id); if(!item) return;
+  if(field.startsWith('opt')){ item.opts[+field.slice(3)]=val; } else item[field]=val;
+  render();
+}
+
+function buildList(){
+  const list=G('qlist');
+  G('qempty').style.display=items.length?'none':'block';
+  G('qcnt').textContent=items.length;
+  list.innerHTML='';
+  items.forEach((item,i)=>{
+    const div=document.createElement('div');
+    div.className='qi'+(item.type==='section'?' sec-item':'');
+    const acts=`<div class="qacts">
+      ${i>0?`<button onclick="mvItem(${item.id},-1)">↑</button>`:''}
+      ${i<items.length-1?`<button onclick="mvItem(${item.id},1)">↓</button>`:''}
+      <button onclick="rmItem(${item.id})">🗑</button>
+    </div>`;
+
+    if(item.type==='section'){
+      div.innerHTML=`<div class="qi-head"><span class="qbadge sb">§ SECTION</span>${acts}</div>
+        <input type="text" class="form-control" style="font-size:.82rem;font-weight:700;margin-bottom:4px;"
+               value="${esc(item.title)}" oninput="upd(${item.id},'title',this.value)"
+               placeholder="Section Title — e.g. Part A: Multiple Choice">
+        <input type="text" class="form-control" style="font-size:.77rem;margin-bottom:4px;"
+               value="${esc(item.subtitle)}" oninput="upd(${item.id},'subtitle',this.value)"
+               placeholder="Subtitle (optional)">
+        <input type="text" class="form-control" style="font-size:.77rem;"
+               value="${esc(item.inst)}" oninput="upd(${item.id},'inst',this.value)"
+               placeholder="Section instructions (optional)">`;
     } else {
-        zoomLevel = Math.max(0.4, Math.min(1.5, zoomLevel + delta));
+      const lbl={mcq:'MCQ',tf:'T/F',sa:'Short',essay:'Essay'}[item.type];
+      div.innerHTML=`<div class="qi-head">
+          <span class="qbadge">${lbl}</span>
+          <input type="number" min="0.5" step="0.5" value="${item.pts}"
+                 oninput="upd(${item.id},'pts',parseFloat(this.value)||1)"
+                 style="width:44px;font-size:.75rem;" class="form-control" title="Points">
+          ${acts}
+        </div>
+        ${makeRTE(item,'text','Question text…')}
+        ${item.type==='mcq'?`<div class="og">
+          ${['A','B','C','D'].map((l,oi)=>`<input type="text" class="form-control"
+            value="${esc(item.opts[oi]||'')}" oninput="upd(${item.id},'opt${oi}',this.value)"
+            placeholder="${l}…">`).join('')}
+        </div>
+        <div style="margin-top:5px;font-size:.71rem;color:var(--text-muted);">Correct:
+          <select onchange="upd(${item.id},'answer',this.value)"
+                  class="form-control" style="width:auto;display:inline-block;font-size:.76rem;">
+            <option value="">—</option>
+            ${['A','B','C','D'].map(l=>`<option value="${l}" ${item.answer===l?'selected':''}>${l}</option>`).join('')}
+          </select>
+        </div>`:''}
+        ${item.type==='tf'?`<div style="margin-top:5px;font-size:.71rem;color:var(--text-muted);">Correct:
+          <select onchange="upd(${item.id},'answer',this.value)"
+                  class="form-control" style="width:auto;display:inline-block;font-size:.76rem;">
+            <option value="">—</option>
+            <option value="True" ${item.answer==='True'?'selected':''}>True / صحيح</option>
+            <option value="False" ${item.answer==='False'?'selected':''}>False / خطأ</option>
+          </select>
+        </div>`:''}
+        ${item.type==='sa'||item.type==='essay'?`<input type="text" class="form-control"
+          value="${esc(item.answer||'')}" oninput="upd(${item.id},'answer',this.value)"
+          style="margin-top:4px;font-size:.76rem;" placeholder="Model answer (for answer key, optional)">`:''}`;
     }
-    g('paperPreview').style.transform = `scale(${zoomLevel})`;
-    g('zoomLabel').textContent = Math.round(zoomLevel*100)+'%';
+    list.appendChild(div);
+    // re-hydrate RTE content (innerHTML set above)
+    if(item.type!=='section'){
+      const el=G(`rte_${item.id}_text`);
+      if(el && el.innerHTML!==(item.text||'')) el.innerHTML=item.text||'';
+    }
+  });
 }
 
-// ── Import exam from server ────────────────────────────────────
-function importExam() {
-    const eid = g('importSelect').value;
-    if (!eid) return;
-    window.location.href = '?exam=' + eid;
-}
+// ══ Paper builders ════════════════════════════════════════════
+function dvdCSS(){ return dvd(GV('l_dvd')); }
 
-// ── Question management ────────────────────────────────────────
-function addQuestion(type, data) {
-    const q = data || {
-        id:   ++qIdSeq,
-        type: type,
-        text: '',
-        opts: type === 'mcq' ? ['','','',''] : [],
-        answer: '',
-        pts:  type === 'essay' ? 5 : 1,
-    };
-    questions.push(q);
-    renderQList();
-    render();
-    switchTab('questions');
-}
+function buildExam(showKey){
+  const lang=GV('s_lang'), isAr=lang==='ar', isBi=lang==='bi';
+  const af   =GV('s_arf')||'Cairo';
+  const font = isAr?`'${af}',sans-serif`:(GV('l_font')||"'Times New Roman',serif");
+  const fs   =GV('l_fs')||'12pt', lh=GV('l_lh')||'1.5';
+  const hdr  =GV('l_hdr')||'centered';
+  const optCls=GV('l_opt')||'tc';
+  const sal  =+GV('l_sal')||3, esl=+GV('l_esl')||8;
+  const showPts=GV('l_sp')!=='0', numMode=GV('l_num')||'seq';
+  const key  =showKey||GV('l_ak')==='1';
+  const scr  =GV('l_scr')||'none', wm=GV('l_wm');
+  const sf   =[...document.querySelectorAll('.sfield:checked')].map(c=>c.value);
+  const cn   =GV('s_cen'), cnar=GV('s_cen_ar');
+  const ttl  =GV('s_ttl')||'Untitled', ttlar=GV('s_ttl_ar');
+  const subj =GV('s_subj'), date=GV('s_date');
+  const dur  =GV('s_dur'), pts=GV('s_pts'), term=GV('s_term'), yr=GV('s_yr');
+  const ins  =GV('s_ins'), ftr=GV('s_ftr');
+  const rtlCls=isAr?' pp-rtl':'', rtlDir=isAr?' dir="rtl"':'';
+  const arLabels={Name:'الاسم','Student ID':'رقم الطالب','Class / Group':'الفصل / المجموعة',Score:'الدرجة',Signature:'التوقيع'};
 
-function removeQuestion(id) {
-    questions = questions.filter(q=>q.id!=id);
-    renderQList();
-    render();
-}
+  let h=`<div style="font-family:${font};font-size:${fs};line-height:${lh};position:relative;"
+             class="pp-page${rtlCls}"${rtlDir}>`;
+  if(wm) h+=`<div class="pp-wm">${wm}</div>`;
 
-function moveQuestion(id, dir) {
-    const i = questions.findIndex(q=>q.id==id);
-    if (i<0) return;
-    const j = i+dir;
-    if (j<0||j>=questions.length) return;
-    [questions[i],questions[j]] = [questions[j],questions[i]];
-    renderQList();
-    render();
-}
+  // Header
+  const name =isAr?(cnar||cn):cn, etl=isAr?(ttlar||ttl):ttl;
+  if(isBi){
+    h+=`<div style="display:grid;grid-template-columns:1fr 1px 1fr;gap:10px;border-bottom:${dvdCSS()};padding-bottom:10px;margin-bottom:10px;align-items:center;">
+      <div><div style="font-size:13pt;font-weight:900;">${cn}</div>
+        <div style="font-size:11pt;font-weight:700;">${ttl}</div>
+        ${subj||date?`<div style="font-size:9pt;color:#555;">${[subj,date].filter(Boolean).join(' · ')}</div>`:''}
+      </div>
+      <div style="background:#ccc;"></div>
+      <div dir="rtl" style="text-align:right;font-family:'${af}',sans-serif;">
+        <div style="font-size:13pt;font-weight:900;">${cnar||cn}</div>
+        <div style="font-size:11pt;font-weight:700;">${ttlar||ttl}</div>
+        ${subj||date?`<div style="font-size:9pt;color:#555;">${[subj,date].filter(Boolean).join(' · ')}</div>`:''}
+      </div></div>`;
+  } else if(hdr==='centered'){
+    h+=`<div class="pp-hdr" style="text-align:center;border-bottom:${dvdCSS()};padding-bottom:10px;">`;
+    if(name) h+=`<div class="pp-cn">${name}</div>`;
+    h+=`<div class="pp-et">${etl}</div>`;
+    if(subj||date) h+=`<div class="pp-es">${[subj,date].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div>`;
+    h+=`</div>`;
+  } else if(hdr==='logo'){
+    h+=`<div class="pp-lr" style="border-bottom:${dvdCSS()};padding-bottom:10px;margin-bottom:10px;">
+      <div class="pp-lb">LOGO</div>
+      <div style="flex:1;">${name?`<div class="pp-cn">${name}</div>`:''}
+        <div class="pp-et">${etl}</div>
+        ${subj||date?`<div class="pp-es">${[subj,date].filter(Boolean).join(' · ')}</div>`:''}</div></div>`;
+  } else if(hdr==='split'){
+    h+=`<div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:${dvdCSS()};padding-bottom:8px;margin-bottom:10px;">
+      <div>${name?`<div style="font-size:13pt;font-weight:900;">${name}</div>`:''}
+        <div style="font-size:11pt;font-weight:700;">${etl}</div></div>
+      <div style="text-align:right;font-size:9.5pt;color:#555;">
+        ${subj?`<div>${subj}</div>`:''}${date?`<div>${date}</div>`:''}</div></div>`;
+  } else {
+    h+=`<div style="border-bottom:${dvdCSS()};padding-bottom:8px;margin-bottom:10px;">
+      <div style="font-size:13pt;font-weight:900;">${etl}</div></div>`;
+  }
 
-function updateQ(id, field, value) {
-    const q = questions.find(q=>q.id==id);
-    if (!q) return;
-    if (field.startsWith('opt')) {
-        const oi = parseInt(field.replace('opt',''));
-        q.opts[oi] = value;
+  // Meta
+  const mc=[];
+  if(dur) mc.push([isAr?'المدة':isBi?'Duration / المدة':'Duration', dur+(isAr?' د':' min')]);
+  if(pts) mc.push([isAr?'الدرجة الكلية':isBi?'Points / الدرجة':'Total Points', pts]);
+  if(term) mc.push([isAr?'الفصل':isBi?'Term / الفصل':'Term', term]);
+  if(yr) mc.push([isAr?'العام':isBi?'Year / العام':'Year', yr]);
+  if(mc.length){
+    h+=`<div class="pp-mr" style="grid-columns:repeat(${mc.length},1fr);">`;
+    mc.forEach(([k,v])=>h+=`<div class="pp-mc"><strong>${k}</strong><span>${v}</span></div>`);
+    h+=`</div>`;
+  }
+
+  // Student box
+  if(sf.length){
+    const cols=sf.length<=2?sf.length:sf.length<=4?Math.ceil(sf.length/2):3;
+    h+=`<div class="pp-sb" style="grid-template-columns:repeat(${cols},1fr);">`;
+    sf.forEach(f=>{
+      const lbl=isAr?(arLabels[f]||f):isBi?`${f} / ${arLabels[f]||f}`:f;
+      h+=`<div class="pp-sf"><span>${lbl}</span><div class="pp-sl"></div></div>`;
+    });
+    h+=`</div>`;
+  }
+
+  // Instructions
+  if(ins){
+    const l=isAr?'التعليمات:':isBi?'Instructions / التعليمات:':'Instructions:';
+    h+=`<div class="pp-ins"><strong>${l}</strong> ${ins.replace(/\n/g,'<br>')}</div>`;
+  }
+
+  // Questions + sections
+  let gn=0;
+  const akRows=[];
+  const qs=items.filter(i=>i.type!=='section');
+
+  items.forEach((item,idx)=>{
+    if(item.type==='section'){
+      h+=`<div class="pp-secblock">
+        <div class="pp-sttl">${item.title||'<span style="color:#aaa;font-style:italic;font-weight:400;">Section Title…</span>'}</div>
+        ${item.subtitle?`<div class="pp-ssub">${item.subtitle}</div>`:''}
+        ${item.inst?`<div class="pp-sinst">${item.inst}</div>`:''}
+      </div>`;
     } else {
-        q[field] = value;
-    }
-    render();
-}
-
-function renderQList() {
-    const list = g('questionList');
-    g('noQMsg').style.display = questions.length ? 'none' : 'block';
-    g('qCount').textContent = questions.length;
-    list.innerHTML = '';
-    questions.forEach((q,i)=>{
-        const typeLbl = {mcq:'MCQ',tf:'T/F',sa:'Short',essay:'Essay'}[q.type];
-        const div = document.createElement('div');
-        div.className = 'q-item';
-        div.innerHTML = `
-          <div class="q-item-head">
-            <span class="q-drag" title="Move">⠿</span>
-            <span class="q-badge">${typeLbl}</span>
-            <input type="number" min="0.5" step="0.5" value="${q.pts}"
-                   oninput="updateQ(${q.id},'pts',parseFloat(this.value)||1)"
-                   style="width:50px;font-size:0.78rem;" class="form-control" title="Points">
-            <div class="q-item-actions">
-              ${i>0?`<button onclick="moveQuestion(${q.id},-1)" title="Up">↑</button>`:''}
-              ${i<questions.length-1?`<button onclick="moveQuestion(${q.id},1)" title="Down">↓</button>`:''}
-              <button onclick="removeQuestion(${q.id})" title="Delete">🗑</button>
-            </div>
-          </div>
-          <input type="text" class="form-control q-text-input" value="${esc(q.text)}"
-                 oninput="updateQ(${q.id},'text',this.value)"
-                 placeholder="Question text…">
-          ${q.type==='mcq' ? `
-            <div class="q-opt-grid">
-              ${['A','B','C','D'].map((l,oi)=>`
-                <input type="text" class="form-control" value="${esc(q.opts[oi]||'')}"
-                       oninput="updateQ(${q.id},'opt${oi}',this.value)"
-                       placeholder="${l}…">`).join('')}
-            </div>
-            <div style="margin-top:5px;font-size:0.72rem;color:var(--text-muted);">
-              Correct:
-              <select onchange="updateQ(${q.id},'answer',this.value)" class="form-control" style="width:auto;display:inline-block;font-size:0.78rem;">
-                <option value="">—</option>
-                ${['A','B','C','D'].map(l=>`<option value="${l}" ${q.answer===l?'selected':''}>${l}</option>`).join('')}
-              </select>
-            </div>` : ''}
-          ${q.type==='tf' ? `
-            <div style="margin-top:5px;font-size:0.72rem;color:var(--text-muted);">
-              Correct:
-              <select onchange="updateQ(${q.id},'answer',this.value)" class="form-control" style="width:auto;display:inline-block;font-size:0.78rem;">
-                <option value="">—</option>
-                <option value="True" ${q.answer==='True'?'selected':''}>True</option>
-                <option value="False" ${q.answer==='False'?'selected':''}>False</option>
-              </select>
-            </div>` : ''}
-          ${q.type==='sa'||q.type==='essay' ? `
-            <input type="text" class="form-control" value="${esc(q.answer||'')}"
-                   oninput="updateQ(${q.id},'answer',this.value)"
-                   style="margin-top:4px;font-size:0.78rem;"
-                   placeholder="Model answer (optional, for answer key)…">` : ''}
-        `;
-        list.appendChild(div);
-    });
-}
-
-function esc(s) { return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-
-// ── Main render ───────────────────────────────────────────────
-function render(forPrint, showKey) {
-    const center   = gv('s_center');
-    const title    = gv('s_title')    || 'Untitled Exam';
-    const subject  = gv('s_subject');
-    const date     = gv('s_date');
-    const duration = gv('s_duration');
-    const points   = gv('s_points');
-    const term     = gv('s_term');
-    const year     = gv('s_year');
-    const instruct = gv('s_instructions');
-    const footer   = gv('s_footer');
-    const font     = gv('l_font')     || "'Times New Roman',serif";
-    const fsize    = gv('l_fsize')    || '12pt';
-    const lh       = gv('l_lh')       || '1.5';
-    const headerSt = gv('l_header')   || 'centered';
-    const dividerSt= gv('l_divider')  || 'double';
-    const optsLyt  = gv('l_opts')     || 'two-col';
-    const saLines  = parseInt(gv('l_salines'))||3;
-    const essayLines=parseInt(gv('l_essaylines'))||8;
-    const showPts  = gv('l_showpts') !== '0';
-    const qNumSt   = gv('l_qnum')    || 'seq';
-    const ansKey   = showKey || gv('l_anskey')==='1';
-    const scoring  = gv('l_scoring') || 'none';
-    const watermark= gv('l_watermark');
-
-    // Student fields
-    const sfields  = [...document.querySelectorAll('.sfield:checked')].map(c=>c.value);
-
-    let html = `<div style="font-family:${font};font-size:${fsize};line-height:${lh};position:relative;">`;
-
-    // Watermark
-    if (watermark) {
-        html += `<div class="pp-watermark">${watermark}</div>`;
-    }
-
-    // ── Header ──
-    if (headerSt === 'centered') {
-        html += `<div class="pp-header" style="text-align:center;border-bottom:${divider(dividerSt)};padding-bottom:10px;">`;
-        if (center) html += `<div class="pp-center-name">${center}</div>`;
-        html += `<div class="pp-exam-title">${title}</div>`;
-        if (subject||date) html += `<div class="pp-subtitle">${[subject,date].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div>`;
-        html += `</div>`;
-    } else if (headerSt === 'logo-left') {
-        html += `<div class="pp-logo-area" style="border-bottom:${divider(dividerSt)};padding-bottom:10px;margin-bottom:10px;">
-          <div class="pp-logo-box">LOGO</div>
-          <div class="pp-title-block">
-            ${center?`<div class="pp-center-name">${center}</div>`:''}
-            <div class="pp-exam-title">${title}</div>
-            ${subject||date?`<div class="pp-subtitle">${[subject,date].filter(Boolean).join(' · ')}</div>`:''}
-          </div></div>`;
-    } else if (headerSt === 'split') {
-        html += `<div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:${divider(dividerSt)};padding-bottom:8px;margin-bottom:10px;">
-          <div>
-            ${center?`<div style="font-size:13pt;font-weight:900;">${center}</div>`:''}
-            <div style="font-size:11pt;font-weight:700;">${title}</div>
-          </div>
-          <div style="text-align:right;font-size:9.5pt;color:#555;">
-            ${subject?`<div>${subject}</div>`:''}${date?`<div>${date}</div>`:''}
-          </div></div>`;
-    } else { // minimal
-        html += `<div style="border-bottom:${divider(dividerSt)};padding-bottom:8px;margin-bottom:10px;">
-          <div style="font-size:13pt;font-weight:900;">${title}</div></div>`;
-    }
-
-    // ── Meta bar ──
-    const metaCells = [];
-    if (duration) metaCells.push(['Duration', duration+' min']);
-    if (points)   metaCells.push(['Total Points', points]);
-    if (term)     metaCells.push(['Term', term]);
-    if (year)     metaCells.push(['Year', year]);
-    if (metaCells.length) {
-        html += `<div class="pp-meta" style="grid-template-columns:repeat(${metaCells.length},1fr);margin-bottom:10px;"><div class="pp-meta-row">`;
-        metaCells.forEach(([k,v])=>{
-            html += `<div class="pp-meta-cell"><strong>${k}</strong><span class="pp-meta-val">${v}</span></div>`;
-        });
-        html += `</div></div>`;
-    }
-
-    // ── Student box ──
-    if (sfields.length) {
-        const cols = sfields.length <= 2 ? sfields.length : sfields.length <= 4 ? Math.ceil(sfields.length/2) : 3;
-        html += `<div class="pp-student-box" style="grid-template-columns:repeat(${cols},1fr);">`;
-        sfields.forEach(f=>{
-            html += `<div class="pp-student-field"><span>${f}</span><div class="pp-student-line"></div></div>`;
-        });
-        html += `</div>`;
-    }
-
-    // ── Instructions ──
-    if (instruct) {
-        html += `<div class="pp-instructions"><strong>Instructions:</strong> ${instruct.replace(/\n/g,'<br>')}</div>`;
-    }
-
-    // ── Questions ──
-    const byType = {mcq:[],tf:[],sa:[],essay:[]};
-    questions.forEach(q=>byType[q.type]?.push(q));
-    const sectionMeta = {
-        mcq:   {label:'Multiple Choice Questions', abbr:'MCQ'},
-        tf:    {label:'True / False',              abbr:'T/F'},
-        sa:    {label:'Short Answer Questions',    abbr:'SA'},
-        essay: {label:'Essay / Long Answer',       abbr:'Essay'},
-    };
-
-    let globalNum = 0;
-    const answerKeyRows = [];
-
-    ['mcq','tf','sa','essay'].forEach(type=>{
-        const qs = byType[type];
-        if (!qs.length) return;
-        const typePts = qs.reduce((s,q)=>s+(parseFloat(q.pts)||0),0);
-        html += `<div class="pp-section">
-          <div class="pp-section-title">${sectionMeta[type].label}
-            <span style="font-size:8.5pt;font-weight:400;color:#555;"> (${qs.length} question${qs.length>1?'s':''} · ${typePts} pts)</span>
-          </div>`;
-
-        let sectionNum = 0;
-        qs.forEach(q=>{
-            globalNum++; sectionNum++;
-            const num = qNumSt === 'per-section' ? sectionNum : globalNum;
-            const ptsLabel = showPts ? ` <span class="pp-q-pts">(${q.pts} pt${q.pts!=1?'s':''})</span>` : '';
-            html += `<div class="pp-question">
-              <div class="pp-q-row">
-                <span class="pp-q-num">${num}.</span>
-                <span class="pp-q-text">${q.text || '<em style="color:#aaa;">Question text…</em>'}</span>
-                ${ptsLabel}
-              </div>`;
-
-            if (type==='mcq') {
-                html += `<ul class="pp-opts ${optsLyt}">`;
-                ['A','B','C','D'].forEach((ltr,oi)=>{
-                    const opt = q.opts[oi];
-                    if (!opt) return;
-                    const isCorr = ansKey && q.answer===ltr;
-                    html += `<li class="pp-opt" ${isCorr?'style="background:#d4edda;border-radius:3px;padding:1px 5px;"':''}><span class="pp-opt-key">${ltr}.</span> ${opt}${isCorr?' <strong style="color:#155724;">✓</strong>':''}</li>`;
-                });
-                html += `</ul>`;
-            } else if (type==='tf') {
-                const tc = ansKey && q.answer==='True';
-                const fc = ansKey && q.answer==='False';
-                html += `<div class="pp-tf">
-                  <label><span class="pp-circle" style="${tc?'background:#000;':''}">&nbsp;</span> True</label>
-                  <label><span class="pp-circle" style="${fc?'background:#000;':''}">&nbsp;</span> False</label>
-                </div>`;
-            } else {
-                const lines = type==='essay' ? essayLines : saLines;
-                html += `<div class="pp-lines">`;
-                for (let i=0;i<lines;i++) html += `<div class="pp-line"></div>`;
-                html += `</div>`;
-                if (ansKey && q.answer) {
-                    html += `<div style="background:#fffbf0;border:1.5px dashed #c9902a;border-radius:4px;padding:5px 10px;margin-top:4px;margin-left:24px;font-size:9pt;"><strong>Answer:</strong> ${q.answer}</div>`;
-                }
-            }
-
-            html += `</div>`;
-
-            if (q.answer) answerKeyRows.push({num, text:q.text, answer:q.answer, type, pts:q.pts});
-        });
-        html += `</div>`;
-    });
-
-    // ── Scoring table ──
-    if (scoring !== 'none' && questions.length) {
-        html += `<div style="margin-top:16px;">`;
-        if (scoring === 'simple') {
-            html += `<table class="pp-scoring">
-              <tr><th>Q#</th><th>Max Points</th><th>Score Awarded</th></tr>`;
-            questions.forEach((_,i)=>{
-                html += `<tr><td>${i+1}</td><td>${questions[i].pts}</td><td></td></tr>`;
-            });
-            html += `<tr><th colspan="2">Total</th><th></th></tr></table>`;
-        } else {
-            const byTypePts = {};
-            questions.forEach(q=>{ byTypePts[q.type]=(byTypePts[q.type]||0)+parseFloat(q.pts); });
-            html += `<table class="pp-scoring">
-              <tr><th>Section</th><th>Max Points</th><th>Score</th></tr>`;
-            Object.entries(byTypePts).forEach(([t,pts])=>{
-                html += `<tr><td>${sectionMeta[t]?.label||t}</td><td>${pts}</td><td></td></tr>`;
-            });
-            html += `<tr><th>Total</th><th>${questions.reduce((s,q)=>s+(parseFloat(q.pts)||0),0)}</th><th></th></tr></table>`;
+      gn++;
+      let sn=gn;
+      if(numMode==='ps'){
+        let c=0;
+        for(let k=0;k<=idx;k++){
+          if(items[k].type==='section') c=0;
+          else c++;
         }
-        html += `</div>`;
-    }
+        sn=c;
+      }
+      const num=numMode==='ps'?sn:gn;
+      const ptsL=showPts?` <span class="pp-qp">(${item.pts}${isAr?' د':item.pts!=1?' pts':' pt'})</span>`:'';
+      const qt=item.text||`<em style="color:#aaa;">Question text…</em>`;
 
-    // Total points line
-    if (questions.length) {
-        const total = questions.reduce((s,q)=>s+(parseFloat(q.pts)||0),0);
-        html += `<div class="pp-total">Total: ${total} points</div>`;
-    }
-
-    // Footer
-    if (footer) {
-        html += `<div class="pp-footer">${footer}</div>`;
-    }
-
-    // ── Answer Key ──
-    if (ansKey && answerKeyRows.length) {
-        html += `<div style="page-break-before:always;margin-top:30px;">
-          <div style="text-align:center;font-size:13pt;font-weight:900;border:2px solid #000;padding:8px;margin-bottom:14px;">— ANSWER KEY —</div>
-          <table class="pp-scoring">
-            <tr><th>#</th><th>Question</th><th>Answer</th><th>Pts</th></tr>
-            ${answerKeyRows.map(r=>`<tr>
-              <td>${r.num}</td>
-              <td>${(r.text||'').substring(0,60)}${(r.text||'').length>60?'…':''}</td>
-              <td><strong style="color:#155724;">${r.answer}</strong></td>
-              <td>${r.pts}</td>
-            </tr>`).join('')}
-          </table>
+      h+=`<div class="pp-q">
+        <div class="pp-qrow">
+          <span class="pp-qn">${num}.</span>
+          <span class="pp-qt">${qt}</span>
+          ${ptsL}
         </div>`;
+
+      if(item.type==='mcq'){
+        const lets=['A','B','C','D','E'].slice(0,+GV('p_bch')||4);
+        h+=`<ul class="pp-opts ${optCls}">`;
+        lets.forEach((l,oi)=>{
+          const opt=item.opts[oi]; if(!opt) return;
+          const ok=key&&item.answer===l;
+          h+=`<li class="pp-opt" ${ok?'style="background:#d4edda;border-radius:3px;padding:1px 4px;"':''}>
+            <span class="pp-ok">${l}.</span>${opt}${ok?` <strong style="color:#155724;">✓</strong>`:''}
+          </li>`;
+        });
+        h+=`</ul>`;
+      } else if(item.type==='tf'){
+        const tl=isAr?'صحيح':isBi?'True / صحيح':'True';
+        const fl=isAr?'خطأ':isBi?'False / خطأ':'False';
+        const tc=key&&item.answer==='True', fc=key&&item.answer==='False';
+        h+=`<div class="pp-tf">
+          <label><span class="pp-circ" style="${tc?'background:#000;':''}">&nbsp;</span>${tl}</label>
+          <label><span class="pp-circ" style="${fc?'background:#000;':''}">&nbsp;</span>${fl}</label>
+        </div>`;
+      } else {
+        const ln=item.type==='essay'?esl:sal;
+        h+=`<div class="pp-lines">${Array(ln).fill('<div class="pp-line"></div>').join('')}</div>`;
+        if(key&&item.answer)
+          h+=`<div style="background:#fffbf0;border:1.5px dashed #c9902a;border-radius:3px;padding:4px 9px;margin-top:3px;margin-left:22px;font-size:9pt;">
+            <strong>${isAr?'الإجابة:':'Answer:'}</strong> ${item.answer}</div>`;
+      }
+      h+=`</div>`;
+      if(item.answer) akRows.push({num,text:item.text||'',answer:item.answer,pts:item.pts});
     }
+  });
 
-    html += `</div>`;
+  // Scoring
+  if(scr!=='none'&&qs.length){
+    if(scr==='simple'){
+      const q=isAr?'السؤال':'Q#', m=isAr?'الدرجة القصوى':'Max', s=isAr?'المحقق':'Score';
+      h+=`<div style="margin-top:12px;"><table class="pp-tbl"><tr><th>${q}</th><th>${m}</th><th>${s}</th></tr>`;
+      qs.forEach((_,i)=>h+=`<tr><td>${i+1}</td><td>${qs[i].pts}</td><td></td></tr>`);
+      h+=`<tr><th colspan="2">${isAr?'المجموع':'Total'}</th><th></th></tr></table></div>`;
+    } else {
+      const tot=qs.reduce((s,q)=>s+(+q.pts||0),0);
+      const secM={}, curSec={v:isAr?'عام':'General'};
+      items.forEach(item=>{
+        if(item.type==='section') curSec.v=item.title||'Section';
+        else secM[curSec.v]=(secM[curSec.v]||0)+(+item.pts||0);
+      });
+      h+=`<div style="margin-top:12px;"><table class="pp-tbl">
+        <tr><th>${isAr?'القسم':'Section'}</th><th>${isAr?'الدرجة':'Max'}</th><th>${isAr?'المحقق':'Score'}</th></tr>`;
+      Object.entries(secM).forEach(([s,p])=>h+=`<tr><td>${s}</td><td>${p}</td><td></td></tr>`);
+      h+=`<tr><th>${isAr?'المجموع':'Total'}</th><th>${tot}</th><th></th></tr></table></div>`;
+    }
+  }
 
-    if (forPrint) return html;
-    g('paperPreview').innerHTML = html;
+  // Total + footer
+  const totPts=qs.reduce((s,q)=>s+(+q.pts||0),0);
+  if(qs.length) h+=`<div class="pp-tot">${isAr?'المجموع الكلي:':'Total:'} ${totPts} ${isAr?'درجة':'points'}</div>`;
+  if(ftr) h+=`<div class="pp-ftr">${ftr}</div>`;
+
+  // Answer key page
+  if(key&&akRows.length){
+    h+=`<div style="page-break-before:always;margin-top:26px;">
+      <div style="text-align:center;font-size:13pt;font-weight:900;border:2px solid #000;padding:8px;margin-bottom:12px;">
+        ${isAr?'— مفتاح الإجابات —':'— ANSWER KEY —'}
+      </div>
+      <table class="pp-tbl">
+        <tr><th>#</th><th>${isAr?'السؤال':'Question'}</th><th>${isAr?'الإجابة':'Answer'}</th><th>${isAr?'الدرجة':'Pts'}</th></tr>
+        ${akRows.map(r=>`<tr>
+          <td>${r.num}</td>
+          <td>${noTags(r.text).substring(0,55)}${noTags(r.text).length>55?'…':''}</td>
+          <td><strong style="color:#155724;">${r.answer}</strong></td>
+          <td>${r.pts}</td></tr>`).join('')}
+      </table></div>`;
+  }
+  h+=`</div>`;
+  return h;
 }
 
-function divider(style) {
-    if (style==='double') return '3px double #000';
-    if (style==='thick')  return '3px solid #000';
-    if (style==='single') return '1.5px solid #000';
-    return 'none';
+function buildInstr(){
+  const lang=GV('s_lang'), isAr=lang==='ar';
+  const af=GV('s_arf')||'Cairo';
+  const font=isAr?`'${af}',sans-serif`:(GV('l_font')||"'Times New Roman',serif");
+  const fs=GV('l_fs')||'12pt', lh=GV('l_lh')||'1.5';
+  const iTitle=GV('p_iptl')||'General Instructions';
+  const grls=GV('p_grls'), mcqi=GV('p_mcqi'), sai=GV('p_sai'), ais=GV('p_ais');
+  const showSig=GV('p_ipsig')!=='0';
+  const rtlCls=isAr?' pp-rtl':'', rtlDir=isAr?' dir="rtl"':'';
+
+  let h=`<div style="font-family:${font};font-size:${fs};line-height:${lh};position:relative;"
+             class="pp-page${rtlCls}"${rtlDir}>`;
+  // Mini header
+  h+=`<div style="text-align:center;padding-bottom:8px;border-bottom:1.5px solid #000;margin-bottom:11px;">
+    ${GV('s_cen')?`<div style="font-size:12pt;font-weight:900;">${isAr?GV('s_cen_ar')||GV('s_cen'):GV('s_cen')}</div>`:''}
+    ${GV('s_ttl')?`<div style="font-size:10.5pt;font-weight:700;">${isAr?GV('s_ttl_ar')||GV('s_ttl'):GV('s_ttl')}</div>`:''}
+  </div>`;
+  h+=`<div class="ip-ttl">${iTitle}</div>`;
+  if(grls){
+    h+=`<div class="ip-sec"><h3>${isAr?'القواعد العامة':'General Rules'}</h3><ul>`;
+    grls.split('\n').filter(r=>r.trim()).forEach(r=>h+=`<li>${r}</li>`);
+    h+=`</ul></div>`;
+  }
+  if(mcqi) h+=`<div class="ip-sec"><h3>${isAr?'تعليمات الاختيار من متعدد':'Multiple Choice Instructions'}</h3><p>${mcqi.replace(/\n/g,'<br>')}</p></div>`;
+  if(sai)  h+=`<div class="ip-sec"><h3>${isAr?'تعليمات الأسئلة المقالية':'Short Answer Instructions'}</h3><p>${sai.replace(/\n/g,'<br>')}</p></div>`;
+  if(ais)  h+=`<div class="ip-sec" style="border:1px solid #ccc;padding:9px 12px;border-radius:3px;">
+    <h3>📜 ${isAr?'إقرار النزاهة الأكاديمية':'Academic Integrity Statement'}</h3>
+    <p style="font-style:italic;">${ais}</p></div>`;
+  if(showSig){
+    const fl=[isAr?'اسم الطالب':'Student Name', isAr?'التوقيع':'Signature', isAr?'التاريخ':'Date', isAr?'توقيع المراقب':'Invigilator'];
+    h+=`<div class="ip-sig">${fl.map(f=>`<div class="ip-sfl"><span>${f}</span><div class="pp-sl"></div></div>`).join('')}</div>`;
+  }
+  h+=`</div>`;
+  return h;
 }
 
-// ── Print ──────────────────────────────────────────────────────
-function printPaper(withKey) {
-    const font   = gv('l_font')  || "'Times New Roman',serif";
-    const fsize  = gv('l_fsize') || '12pt';
-    const lh     = gv('l_lh')    || '1.5';
-    const content = render(true, withKey);
+function buildBubble(){
+  const lang=GV('s_lang'), isAr=lang==='ar';
+  const af=GV('s_arf')||'Cairo';
+  const font=isAr?`'${af}',sans-serif`:(GV('l_font')||"'Times New Roman',serif");
+  const sf=[...document.querySelectorAll('.sfield:checked')].map(c=>c.value);
+  const ch=+GV('p_bch')||4, cols=+GV('p_bcl')||2;
+  const bqc=+GV('p_bqc');
+  const cnt=bqc||items.filter(i=>i.type==='mcq').length;
+  const lets=['A','B','C','D','E'].slice(0,ch);
+  const showEx=GV('p_bex')!=='0';
+  const rtlDir=isAr?' dir="rtl"':'';
+  const arL={Name:'الاسم','Student ID':'رقم الطالب','Class / Group':'الفصل',Score:'الدرجة'};
 
-    const win = window.open('', '_blank', 'width=900,height=700');
-    win.document.write(`<!DOCTYPE html><html><head>
-      <meta charset="UTF-8">
-      <title>${gv('s_title')||'Exam Paper'}</title>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:${font};font-size:${fsize};line-height:${lh};color:#000;background:#fff;padding:18mm 20mm}
-        .pp-header,.pp-logo-area{margin-bottom:14px}
-        .pp-center-name{font-size:14pt;font-weight:900}
-        .pp-exam-title{font-size:11pt;font-weight:700}
-        .pp-subtitle{font-size:9pt;color:#555}
-        .pp-meta{margin-bottom:10px}
-        .pp-meta-row{display:flex;border:1px solid #ccc}
-        .pp-meta-cell{flex:1;padding:4px 8px;border-right:1px solid #ccc}
-        .pp-meta-cell:last-child{border-right:none}
-        .pp-meta-cell strong{display:block;font-size:8pt;text-transform:uppercase;color:#777}
-        .pp-meta-val{font-weight:600}
-        .pp-student-box{border:1px solid #888;padding:8px 12px;display:grid;gap:8px;margin:10px 0}
-        .pp-student-field{font-size:9.5pt}
-        .pp-student-field span{display:block;font-size:8pt;text-transform:uppercase;color:#777;margin-bottom:2px}
-        .pp-student-line{border-bottom:1px solid #000;height:18px}
-        .pp-instructions{background:#f8f8f8;border-left:3.5px solid #000;padding:8px 12px;font-size:9.5pt;margin:10px 0;line-height:1.55}
-        .pp-section{margin:14px 0 8px}
-        .pp-section-title{font-size:10.5pt;font-weight:800;border-top:1.5px solid #000;padding-top:5px;margin-bottom:8px}
-        .pp-question{margin-bottom:14px;page-break-inside:avoid}
-        .pp-q-row{display:flex;gap:6px;align-items:baseline;margin-bottom:5px}
-        .pp-q-num{font-weight:800;min-width:24px;font-size:10.5pt}
-        .pp-q-text{flex:1;line-height:1.5;font-size:10.5pt}
-        .pp-q-pts{font-size:8.5pt;color:#666;white-space:nowrap}
-        .pp-opts{list-style:none;padding-left:24px}
-        .pp-opts.two-col{display:grid;grid-template-columns:1fr 1fr;gap:2px 16px}
-        .pp-opt{display:flex;gap:8px;font-size:9.5pt;padding:2px 0;align-items:baseline}
-        .pp-opt-key{font-weight:700;min-width:16px}
-        .pp-tf{display:flex;gap:22px;padding-left:24px;font-size:9.5pt}
-        .pp-circle{width:12px;height:12px;border:1.5px solid #000;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle}
-        .pp-lines{padding-left:24px;margin-top:4px}
-        .pp-line{border-bottom:1px solid #aaa;height:20px;margin-bottom:5px}
-        .pp-scoring{width:100%;border-collapse:collapse;font-size:9.5pt;margin-top:14px}
-        .pp-scoring td,.pp-scoring th{border:1px solid #ccc;padding:4px 7px}
-        .pp-scoring th{background:#f0f0f0;font-size:8.5pt;text-transform:uppercase}
-        .pp-total{text-align:right;font-weight:700;font-size:10.5pt;border-top:1.5px solid #000;padding-top:6px;margin-top:10px}
-        .pp-footer{font-size:8pt;color:#888;text-align:center;margin-top:20px;border-top:1px solid #ddd;padding-top:6px}
-        .pp-watermark{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0.04;font-size:72pt;font-weight:900;transform:rotate(-35deg);white-space:nowrap;z-index:1}
-        .pp-logo-area{display:flex;align-items:center;gap:14px}
-        .pp-logo-box{width:52px;height:52px;border:2px solid #000;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.65rem;color:#888;flex-shrink:0}
-        .pp-title-block{flex:1}
-        @page{margin:18mm 20mm}
-        @media print{body{padding:0}}
-      </style>
-    </head><body>${content}
-    <script>window.onload=function(){window.print();setTimeout(function(){window.close()},800)}<\/script>
-    </body></html>`);
-    win.document.close();
+  let h=`<div style="font-family:${font};font-size:11pt;line-height:1.4;"${rtlDir}>`;
+  h+=`<div class="bs-ttl">⭕ ${isAr?'ورقة الإجابات — نظام الفقاعات':'Bubble Answer Sheet'}</div>`;
+
+  // Student info
+  const ifields=sf.filter(f=>f!=='Signature').slice(0,4);
+  h+=`<div class="bs-info">${ifields.map(f=>`<div class="bs-fld"><span>${isAr?(arL[f]||f):f}</span><div class="pp-sl"></div></div>`).join('')}</div>`;
+
+  // Example
+  if(showEx){
+    h+=`<div class="bs-leg">${isAr?'مثال: ظلل الدائرة بالكامل':'Example: fill completely'}:&nbsp;
+      ${lets.map((l,i)=>`<span class="bs-bub${i===0?' filled':''}" style="border:1.5px solid #000;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;font-size:6pt;font-weight:700;${i===0?'background:#000;color:#fff':''}">${l}</span>`).join('')}
+    </div>`;
+  }
+
+  if(!cnt){
+    h+=`<div style="text-align:center;padding:28px;color:#888;font-size:9.5pt;border:1px dashed #ccc;border-radius:5px;">
+      ${isAr?'أضف أسئلة الاختيار من متعدد أولاً':'Add MCQ questions to generate bubbles'}
+    </div>`;
+  } else {
+    const perCol=Math.ceil(cnt/cols);
+    h+=`<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:0 16px;">`;
+    for(let col=0;col<cols;col++){
+      const s=col*perCol+1, e=Math.min((col+1)*perCol,cnt);
+      h+=`<div>`;
+      // Column header
+      h+=`<div style="display:flex;padding-left:26px;margin-bottom:4px;">
+        ${lets.map(l=>`<span style="width:21px;text-align:center;font-size:7.5pt;font-weight:700;color:#666;">${l}</span>`).join('')}
+      </div>`;
+      for(let q=s;q<=e;q++){
+        h+=`<div class="bs-row">
+          <span class="bs-num">${q}</span>
+          ${lets.map(l=>`<span class="bs-bub">${l}</span>`).join('')}
+        </div>`;
+      }
+      h+=`</div>`;
+    }
+    h+=`</div>`;
+  }
+  h+=`<div class="pp-ftr">${isAr?'لا تكتب أو تضع علامات خارج الدوائر':'Do not make any marks outside the answer bubbles'}</div>`;
+  h+=`</div>`;
+  return h;
 }
 
-// ── Init ───────────────────────────────────────────────────────
-renderQList();
+function noTags(s){ return (s||'').replace(/<[^>]*>/g,''); }
+
+// ══ Render ════════════════════════════════════════════════════
+function render(forPrint,showKey){
+  let h='';
+  if(curPg==='exam'||forPrint)   h+=buildExam(showKey);
+  if(curPg==='instr'||forPrint){
+    const ip=buildInstr();
+    if(forPrint&&GV('p_ip')==='1') h=ip+h;
+    else if(!forPrint) h=ip;
+  }
+  if(curPg==='bubble'||forPrint){
+    const bv=GV('p_bs');
+    const bp=buildBubble();
+    if(forPrint&&bv!=='0') h+=`<div style="page-break-before:always;">${bp}</div>`;
+    else if(!forPrint&&bv!=='0') h=bp;
+    else if(!forPrint&&bv==='0') h=`<div style="text-align:center;padding:40px;color:#888;font-size:10pt;">Bubble sheet disabled — enable it in the Pages tab.</div>`;
+  }
+  if(forPrint) return h;
+  G('pp').innerHTML=h||'<div style="padding:40px;text-align:center;color:#aaa;">Nothing to preview</div>';
+}
+
+// ══ Print ════════════════════════════════════════════════════
+function getCSS(){
+  const font=GV('l_font')||"'Times New Roman',serif";
+  const fs=GV('l_fs')||'12pt', lh=GV('l_lh')||'1.5';
+  const af=GV('s_arf')||'Cairo';
+  return `@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Amiri:ital,wght@0,400;0,700;1,400&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:${font};font-size:${fs};line-height:${lh};color:#000;background:#fff;padding:15mm 18mm}
+.pp-rtl{direction:rtl;text-align:right;font-family:'${af}',sans-serif}
+.pp-rtl .pp-ins{border-left:none;border-right:3.5px solid #000}
+.pp-rtl .pp-sinst{border-left:none;border-right:3px solid #ccc}
+.pp-rtl .pp-opts,.pp-rtl .pp-tf,.pp-rtl .pp-lines{padding-left:0;padding-right:22px}
+.pp-rtl .pp-tot{text-align:left}
+.pp-wm{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:.04;font-size:64pt;font-weight:900;transform:rotate(-35deg);white-space:nowrap;z-index:0}
+.pp-cn{font-size:14pt;font-weight:900}.pp-et{font-size:11pt;font-weight:700}.pp-es{font-size:9pt;color:#555}
+.pp-lr{display:flex;align-items:center;gap:12px}
+.pp-lb{width:50px;height:50px;border:2px solid #000;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8pt;color:#888;flex-shrink:0}
+.pp-mr{display:flex;border:1px solid #ccc;margin-bottom:9px}
+.pp-mc{flex:1;padding:4px 8px;border-right:1px solid #ccc;font-size:9.5pt}
+.pp-mc:last-child{border-right:none}.pp-mc strong{display:block;font-size:7.5pt;text-transform:uppercase;color:#777}.pp-mc span{font-weight:600}
+.pp-sb{border:1px solid #888;padding:8px 12px;margin:9px 0;display:grid;gap:8px}
+.pp-sf{font-size:9.5pt}.pp-sf span{display:block;font-size:7.5pt;text-transform:uppercase;color:#777;margin-bottom:2px}
+.pp-sl{border-bottom:1px solid #000;height:18px}
+.pp-ins{background:#f8f8f8;border-left:3.5px solid #000;padding:8px 12px;font-size:9.5pt;margin:10px 0;line-height:1.55}
+.pp-secblock{margin:15px 0 9px;page-break-inside:avoid}
+.pp-sttl{font-size:11pt;font-weight:900;border-top:1.5px solid #000;padding-top:5px;margin-bottom:2px}
+.pp-ssub{font-size:9pt;color:#444;margin-bottom:3px}
+.pp-sinst{font-size:9pt;background:#f5f5f5;border-left:3px solid #ccc;padding:5px 10px;margin-bottom:5px;line-height:1.45}
+.pp-q{margin-bottom:12px;page-break-inside:avoid}
+.pp-qrow{display:flex;gap:6px;align-items:baseline;margin-bottom:4px}
+.pp-qn{font-weight:900;min-width:22px;font-size:10.5pt}.pp-qt{flex:1;line-height:1.5;font-size:10.5pt}.pp-qp{font-size:8.5pt;color:#666;white-space:nowrap}
+.pp-opts{list-style:none;padding-left:22px}.pp-opts.tc{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px}
+.pp-opt{display:flex;gap:6px;font-size:9.5pt;padding:2px 0;align-items:baseline}.pp-ok{font-weight:700;min-width:14px}
+.pp-tf{display:flex;gap:20px;padding-left:22px;font-size:9.5pt;margin-top:4px}
+.pp-circ{width:12px;height:12px;border:1.5px solid #000;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle}
+.pp-lines{padding-left:22px;margin-top:4px}.pp-line{border-bottom:1px solid #aaa;height:20px;margin-bottom:5px}
+.pp-tbl{width:100%;border-collapse:collapse;font-size:9.5pt;margin-top:12px;page-break-inside:avoid}
+.pp-tbl td,.pp-tbl th{border:1px solid #ccc;padding:4px 7px}.pp-tbl th{background:#f0f0f0;font-size:8pt;text-transform:uppercase}
+.pp-tot{text-align:right;font-weight:700;font-size:10.5pt;border-top:1.5px solid #000;padding-top:5px;margin-top:8px}
+.pp-ftr{font-size:8pt;color:#888;text-align:center;margin-top:16px;border-top:1px solid #ddd;padding-top:5px}
+.ip-ttl{font-size:13pt;font-weight:900;text-align:center;border:2px solid #000;padding:8px;margin-bottom:13px;letter-spacing:.04em}
+.ip-sec{margin-bottom:13px}.ip-sec h3{font-size:10.5pt;font-weight:800;margin-bottom:5px;border-bottom:1px solid #ddd;padding-bottom:3px}
+.ip-sec p,.ip-sec li{font-size:9.5pt;line-height:1.65;margin-bottom:3px}.ip-sec ul,.ip-sec ol{padding-left:18px}
+.ip-sig{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px;border-top:1px solid #ccc;padding-top:10px}
+.ip-sfl{font-size:9pt}.ip-sfl span{display:block;font-size:7.5pt;text-transform:uppercase;color:#777;margin-bottom:2px}
+.bs-ttl{font-size:12pt;font-weight:900;text-align:center;border:2px solid #000;padding:7px;margin-bottom:11px}
+.bs-info{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px;font-size:9.5pt}
+.bs-fld span{display:block;font-size:7.5pt;text-transform:uppercase;color:#777;margin-bottom:2px}
+.bs-row{display:flex;align-items:center;margin-bottom:3px}
+.bs-num{min-width:26px;font-weight:700;text-align:right;padding-right:7px;font-size:8pt;color:#555}
+.bs-bub{width:17px;height:17px;border:1.5px solid #000;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:6pt;font-weight:700;margin:0 2px}
+.bs-bub.filled{background:#000;color:#fff}
+.bs-leg{display:flex;align-items:center;gap:10px;font-size:8pt;margin-bottom:7px;color:#555}
+@page{margin:15mm 18mm}@media print{body{padding:0}}`;
+}
+
+function doPrint(withKey){
+  let c='';
+  if(GV('p_ip')==='1') c+=buildInstr();
+  c+=buildExam(withKey);
+  if(GV('p_bs')!=='0') c+=`<div style="page-break-before:always;">${buildBubble()}</div>`;
+  const win=window.open('','_blank','width=960,height=750');
+  const t=GV('s_ttl')||'Exam Paper';
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${t}</title><style>${getCSS()}</style></head><body>${c}<script>window.onload=function(){window.print();setTimeout(function(){window.close()},1200)}<\/script></body></html>`);
+  win.document.close();
+}
+
+// ══ Init ══════════════════════════════════════════════════════
+buildList();
 render();
-zoom(0,'fit');
-
-// Re-render on any input change (for select elements without oninput)
+zm(0,'fit');
 document.querySelectorAll('select').forEach(el=>{
-    if (!el.onchange) el.addEventListener('change',()=>render());
+  if(!el.onchange&&!el.getAttribute('onchange'))
+    el.addEventListener('change',render);
 });
 </script>
 
