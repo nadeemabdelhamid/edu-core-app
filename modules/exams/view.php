@@ -41,9 +41,17 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     }
     if ($action==='close')   { $pdo->prepare("UPDATE exams SET status='closed',ends_at=COALESCE(ends_at,NOW()) WHERE id=? AND center_id=?")->execute([$eid,$cid]); flash('success','Exam closed.'); }
     if ($action==='archive') { $pdo->prepare("UPDATE exams SET status='archived' WHERE id=? AND center_id=?")->execute([$eid,$cid]); flash('success','Exam archived.'); }
-    if ($action==='delete')  {
-        $pdo->prepare("DELETE FROM exams WHERE id=? AND center_id=? AND status IN('draft','archived')")->execute([$eid,$cid]);
-        flash('success','Exam deleted.'); redirect('/educore/modules/exams/');
+    if ($action==='delete') {
+        // Prevent deleting active exams
+        if ($exam['status']==='active') {
+            flash('error','Close the exam before deleting it.');
+        } else {
+            $pdo->prepare("DELETE FROM exam_questions WHERE exam_id=?")->execute([$eid]);
+            $pdo->prepare("DELETE FROM exams WHERE id=? AND center_id=?")->execute([$eid,$cid]);
+            auditLog('exam.deleted','exam',$eid,['title'=>$exam['title']]);
+            flash('success','Exam deleted.');
+            redirect('/educore/modules/exams/');
+        }
     }
 
     // Visibility & access toggles
@@ -91,6 +99,7 @@ include __DIR__ . '/../../templates/layout.php';
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
     <a href="print.php?id=<?=$eid?>" class="btn btn-ghost btn-sm" target="_blank">🖨 Print</a>
     <a href="paper_studio.php?exam=<?=$eid?>" class="btn btn-ghost btn-sm">📄 Studio</a>
+    <a href="edit.php?id=<?=$eid?>" class="btn btn-ghost btn-sm">✏️ Edit</a>
     <a href="duplicate.php?id=<?=$eid?>" class="btn btn-ghost btn-sm" onclick="return confirm('Duplicate this exam?')">⧉ Duplicate</a>
 
     <?php if(in_array($exam['status'],['draft','scheduled'])): ?>
@@ -286,13 +295,19 @@ include __DIR__ . '/../../templates/layout.php';
   </div>
   <?php endif; ?>
 
-  <?php if(in_array($exam['status'],['draft','archived'])): ?>
+  <?php if($exam['status']!=='active'): ?>
   <div class="card" style="border-color:rgba(239,68,68,.25);">
     <div class="card-header"><span class="card-title" style="color:var(--danger);">Danger Zone</span></div>
     <div class="card-body">
-      <form method="POST" onsubmit="return confirm('Permanently delete this exam? This cannot be undone.')">
+      <p style="font-size:.76rem;color:var(--text-muted);margin-bottom:10px;">
+        Deletes the exam and all questions permanently.
+        <?php if((int)($subStats['total']??0)>0): ?>
+        <strong style="color:var(--warning);"><?=(int)$subStats['total']?> submission(s) will be kept.</strong>
+        <?php endif; ?>
+      </p>
+      <form method="POST" onsubmit="return confirm('Delete this exam and all its questions?\n\nSubmissions will be kept for records.\n\nThis cannot be undone.')">
         <?=csrf_field()?><input type="hidden" name="action" value="delete">
-        <button type="submit" class="btn btn-danger w-full" style="font-size:.82rem;">Delete Exam</button>
+        <button type="submit" class="btn btn-danger w-full" style="font-size:.82rem;">🗑 Delete Exam</button>
       </form>
     </div>
   </div>

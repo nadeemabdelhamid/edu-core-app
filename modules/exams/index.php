@@ -67,6 +67,32 @@ $gStmt = $pdo->prepare("SELECT id,name FROM `groups` WHERE center_id=? AND is_ac
 $gStmt->execute([$cid]);
 $groups = $gStmt->fetchAll();
 
+// Handle quick delete from index
+if ($_SERVER['REQUEST_METHOD']==='POST') {
+    csrf_verify();
+    if ($_POST['action']==='delete') {
+        $delId = (int)($_POST['exam_id'] ?? 0);
+        $chk = $pdo->prepare("SELECT id,title,status FROM exams WHERE id=? AND center_id=?");
+        $chk->execute([$delId,$cid]);
+        $delExam = $chk->fetch();
+        if ($delExam && $delExam['status']!=='active') {
+            if (!isRole('owner')) {
+                // teachers can only delete own
+                $own = $pdo->prepare("SELECT id FROM exams WHERE id=? AND created_by=?");
+                $own->execute([$delId,$uid]);
+                if (!$own->fetch()) { flash('error','Not authorized.'); redirect('index.php'); }
+            }
+            $pdo->prepare("DELETE FROM exam_questions WHERE exam_id=?")->execute([$delId]);
+            $pdo->prepare("DELETE FROM exams WHERE id=? AND center_id=?")->execute([$delId,$cid]);
+            auditLog('exam.deleted','exam',$delId,['title'=>$delExam['title']]);
+            flash('success','"'.sanitize($delExam['title']).'" deleted.');
+        } elseif ($delExam && $delExam['status']==='active') {
+            flash('error','Close the exam before deleting it.');
+        }
+    }
+    redirect('index.php?status='.$status.'&type='.$type.'&group='.$gid);
+}
+
 include __DIR__ . '/../../templates/layout.php';
 ?>
 
@@ -177,18 +203,32 @@ include __DIR__ . '/../../templates/layout.php';
           <td style="font-weight:600;color:<?=$avgColor?>;"><?=$ex['avg_score']??'—'?><?=$ex['avg_score']?'%':''?></td>
           <td><span class="badge <?=$statusBadge?>"><?=ucfirst($ex['status'])?></span></td>
           <td>
-            <div style="display:flex;gap:5px;justify-content:flex-end;">
+            <div style="display:flex;gap:5px;justify-content:flex-end;align-items:center;">
               <a href="view.php?id=<?=$ex['id']?>" class="btn btn-ghost btn-icon" title="View">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </a>
+              <a href="edit.php?id=<?=$ex['id']?>" class="btn btn-ghost btn-icon" title="Edit Settings"
+                 style="color:var(--accent);">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </a>
               <?php if(in_array($ex['status'],['draft','scheduled'])): ?>
-              <a href="builder.php?id=<?=$ex['id']?>" class="btn btn-ghost btn-sm">Edit</a>
+              <a href="builder.php?id=<?=$ex['id']?>" class="btn btn-ghost btn-sm">Questions</a>
               <?php endif; ?>
-              <?php if($ex['status']==='active'): ?>
-              <a href="results.php?id=<?=$ex['id']?>" class="btn btn-accent btn-sm">Results</a>
+              <?php if(in_array($ex['status'],['active','closed'])): ?>
+              <a href="results.php?id=<?=$ex['id']?>" class="btn btn-ghost btn-sm"
+                 style="<?=$ex['status']==='active'?'color:var(--success);':''?>">Results</a>
               <?php endif; ?>
-              <?php if($ex['status']==='closed'): ?>
-              <a href="results.php?id=<?=$ex['id']?>" class="btn btn-ghost btn-sm">Results</a>
+              <?php if($ex['status']!=='active'): ?>
+              <form method="POST" style="display:inline;"
+                    onsubmit="return confirm('Delete '<?=addslashes(sanitize($ex['title']))?>' and all its questions?\n\nThis cannot be undone.')">
+                <?=csrf_field()?>
+                <input type="hidden" name="action"   value="delete">
+                <input type="hidden" name="exam_id"  value="<?=$ex['id']?>">
+                <button type="submit" class="btn btn-ghost btn-icon" title="Delete"
+                        style="color:var(--danger);">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
+              </form>
               <?php endif; ?>
             </div>
           </td>
