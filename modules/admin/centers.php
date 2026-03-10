@@ -16,11 +16,54 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     csrf_verify();
     $action = $_POST['action']??'';
 
+    if ($action==='approve_center') {
+        $cid = (int)$_POST['center_id'];
+        // Activate center
+        $pdo->prepare("UPDATE centers SET status='trial' WHERE id=?")->execute([$cid]);
+        // Activate owner user
+        $pdo->prepare("UPDATE users SET is_active=1 WHERE center_id=? AND role='owner'")->execute([$cid]);
+        // Activate subscription
+        $pdo->prepare("UPDATE subscriptions SET status='trial' WHERE center_id=?")->execute([$cid]);
+        // Notify owner
+        $owner = $pdo->prepare("SELECT id,name FROM users WHERE center_id=? AND role='owner' LIMIT 1");
+        $owner->execute([$cid]);
+        $ownerRow = $owner->fetch();
+        if ($ownerRow) {
+            pushNotification($ownerRow['id'],'approval','Your account has been approved! 🎉',
+                'Welcome to EduCore! Your 14-day free trial has started. Log in to get started.',
+                '/educore/dashboard.php', $cid);
+        }
+        auditLog('admin.center_approved','center',$cid);
+        flash('success','Center approved and activated.');
+        redirect('/educore/modules/admin/centers.php');
+    }
+
+    if ($action==='reject_center') {
+        $cid    = (int)$_POST['center_id'];
+        $reason = trim($_POST['reason'] ?? 'Your registration did not meet our requirements.');
+        // Notify owner before deleting
+        $owner = $pdo->prepare("SELECT id FROM users WHERE center_id=? AND role='owner' LIMIT 1");
+        $owner->execute([$cid]);
+        $ownerRow = $owner->fetch();
+        if ($ownerRow) {
+            pushNotification($ownerRow['id'],'rejection','Registration not approved',
+                $reason, '', $cid);
+        }
+        // Soft-reject: mark suspended so record is kept
+        $pdo->prepare("UPDATE centers SET status='suspended' WHERE id=?")->execute([$cid]);
+        auditLog('admin.center_rejected','center',$cid,['reason'=>$reason]);
+        flash('success','Center rejected.');
+        redirect('/educore/modules/admin/centers.php');
+    }
+
     if ($action==='toggle_status') {
         $cid    = (int)$_POST['center_id'];
         $newSt  = $_POST['new_status'];
         if (in_array($newSt,['active','suspended','trial'])) {
             $pdo->prepare("UPDATE centers SET status=? WHERE id=?")->execute([$newSt,$cid]);
+            // Also toggle owner is_active accordingly
+            $active = $newSt === 'suspended' ? 0 : 1;
+            $pdo->prepare("UPDATE users SET is_active=? WHERE center_id=? AND role='owner'")->execute([$active,$cid]);
             auditLog('admin.center_status','center',$cid,['status'=>$newSt]);
             flash('success','Center status updated.');
         }
@@ -67,14 +110,15 @@ $result  = paginate($query, $params, $page, 20);
 $centers = $result['data'];
 
 // Platform-wide stats
-$totalCenters  = $pdo->query("SELECT COUNT(*) FROM centers")->fetchColumn();
-$activeCenters = $pdo->query("SELECT COUNT(*) FROM centers WHERE status='active'")->fetchColumn();
-$trialCenters  = $pdo->query("SELECT COUNT(*) FROM centers WHERE status='trial'")->fetchColumn();
-$totalStudents = $pdo->query("SELECT COUNT(*) FROM students WHERE is_active=1")->fetchColumn();
+$totalCenters   = $pdo->query("SELECT COUNT(*) FROM centers")->fetchColumn();
+$activeCenters  = $pdo->query("SELECT COUNT(*) FROM centers WHERE status='active'")->fetchColumn();
+$trialCenters   = $pdo->query("SELECT COUNT(*) FROM centers WHERE status='trial'")->fetchColumn();
+$pendingCenters = $pdo->query("SELECT COUNT(*) FROM centers WHERE status='pending'")->fetchColumn();
+$totalStudents  = $pdo->query("SELECT COUNT(*) FROM students WHERE is_active=1")->fetchColumn();
 
 $plans = $pdo->query("SELECT id,name FROM plans WHERE is_active=1 ORDER BY price")->fetchAll();
 
-$statusColors=['active'=>'badge-success','trial'=>'badge-warning','suspended'=>'badge-danger'];
+$statusColors=['active'=>'badge-success','trial'=>'badge-warning','suspended'=>'badge-danger','pending'=>'badge-info'];
 
 include __DIR__ . '/../../templates/layout.php';
 ?>
@@ -87,7 +131,10 @@ include __DIR__ . '/../../templates/layout.php';
   <div class="stat-card" style="--stat-color:#3b82f6;--stat-bg:rgba(59,130,246,0.1)"><div class="stat-value"><?=$totalCenters?></div><div class="stat-label">Total Centers</div></div>
   <div class="stat-card" style="--stat-color:#22c55e;--stat-bg:rgba(34,197,94,0.1)"><div class="stat-value"><?=$activeCenters?></div><div class="stat-label">Active</div></div>
   <div class="stat-card" style="--stat-color:var(--accent);--stat-bg:var(--accent-subtle)"><div class="stat-value"><?=$trialCenters?></div><div class="stat-label">Trial</div></div>
-  <div class="stat-card" style="--stat-color:#8b5cf6;--stat-bg:rgba(139,92,246,0.1)"><div class="stat-value"><?=number_format($totalStudents)?></div><div class="stat-label">Total Students</div></div>
+  <div class="stat-card" style="--stat-color:#60a5fa;--stat-bg:rgba(96,165,250,0.1);<?=$pendingCenters>0?'border:1px solid rgba(96,165,250,0.3);':''?>">
+    <div class="stat-value"><?=$pendingCenters?><?=$pendingCenters>0?' <span style="font-size:0.7rem;">⏳</span>':''?></div>
+    <div class="stat-label"><a href="?status=pending" style="color:inherit;text-decoration:none;">Pending Approval</a></div>
+  </div>
 </div>
 
 <!-- Filters -->
@@ -97,7 +144,7 @@ include __DIR__ . '/../../templates/layout.php';
       <input type="text" name="q" class="form-control" placeholder="Search centers…" value="<?=sanitize($search)?>" style="width:220px;">
       <select name="status" class="form-control" style="width:140px;">
         <option value="">All Statuses</option>
-        <?php foreach(['active','trial','suspended'] as $s): ?>
+        <?php foreach(['pending','active','trial','suspended'] as $s): ?>
         <option value="<?=$s?>" <?=$status===$s?'selected':''?>><?=ucfirst($s)?></option>
         <?php endforeach; ?>
       </select>
@@ -134,6 +181,23 @@ include __DIR__ . '/../../templates/layout.php';
           <td style="text-align:right;">
             <div style="display:flex;gap:6px;justify-content:flex-end;">
               <!-- Status toggle -->
+              <?php if($c['status']==='pending'): ?>
+              <!-- Approve -->
+              <form method="POST" style="display:inline;">
+                <?=csrf_field()?>
+                <input type="hidden" name="action" value="approve_center">
+                <input type="hidden" name="center_id" value="<?=$c['id']?>">
+                <button type="submit" class="btn btn-sm btn-success"
+                        onclick="return confirm('Approve and activate '<?=addslashes(sanitize($c['name']))?>' ?')">
+                  ✓ Approve
+                </button>
+              </form>
+              <!-- Reject -->
+              <button class="btn btn-sm btn-danger"
+                      onclick="openRejectModal(<?=$c['id']?>, '<?=addslashes(sanitize($c['name']))?>')">
+                ✕ Reject
+              </button>
+              <?php else: ?>
               <div class="dropdown" style="position:relative;">
                 <button class="btn btn-ghost btn-sm" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">
                   Status ↓
@@ -155,6 +219,7 @@ include __DIR__ . '/../../templates/layout.php';
               </div>
               <!-- Assign plan -->
               <button class="btn btn-ghost btn-sm" onclick="openPlanModal(<?=$c['id']?>, '<?=sanitize($c['name'])?>')">Plan</button>
+              <?php endif; ?>
             </div>
           </td>
         </tr>
@@ -208,13 +273,46 @@ include __DIR__ . '/../../templates/layout.php';
   </div>
 </div>
 
+<!-- Reject modal -->
+<div class="modal-backdrop" id="rejectModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Reject Registration</span>
+      <button class="modal-close" onclick="closeModal('rejectModal')">✕</button>
+    </div>
+    <form method="POST">
+      <div class="modal-body">
+        <?=csrf_field()?>
+        <input type="hidden" name="action" value="reject_center">
+        <input type="hidden" name="center_id" id="rejectCenterId">
+        <p style="font-size:.84rem;color:var(--text-muted);margin-bottom:14px;">
+          Rejecting: <strong id="rejectCenterName" style="color:var(--text-primary);"></strong>
+        </p>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Reason (sent to applicant)</label>
+          <textarea name="reason" class="form-control" rows="3"
+                    placeholder="Your registration did not meet our requirements."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('rejectModal')">Cancel</button>
+        <button type="submit" class="btn btn-danger">Reject Registration</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 function openPlanModal(id, name) {
     document.getElementById('modalCenterId').value = id;
     document.getElementById('modalCenterName').textContent = name;
     openModal('planModal');
 }
-// Close dropdowns on outside click
+function openRejectModal(id, name) {
+    document.getElementById('rejectCenterId').value = id;
+    document.getElementById('rejectCenterName').textContent = name;
+    openModal('rejectModal');
+}
 document.addEventListener('click', function(e) {
     document.querySelectorAll('.dropdown > div').forEach(d => {
         if (!d.parentElement.contains(e.target)) d.style.display='none';

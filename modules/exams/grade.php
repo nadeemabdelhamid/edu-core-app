@@ -68,6 +68,22 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $passed = $pct >= $exam['passing_score'] ? 1 : 0;
             $pdo->prepare("UPDATE exam_submissions SET total_score=?,percentage=?,passed=?,status='graded' WHERE id=? AND exam_id=?")
                 ->execute([$total,$pct,$passed,$subId,$eid]);
+
+            // Notify the student
+            $subInfo = $pdo->prepare("SELECT es.student_id, s.user_id FROM exam_submissions es JOIN students s ON s.id=es.student_id WHERE es.id=?");
+            $subInfo->execute([$subId]);
+            $subRow  = $subInfo->fetch();
+            if ($subRow && $subRow['user_id']) {
+                $resultLabel = $passed ? '✓ Passed' : '✗ Failed';
+                $notifTitle  = 'Your exam has been graded';
+                $notifBody   = '"'.$exam['title'].'" — Score: '.round($pct).'% ('.$resultLabel.')';
+                $resultLink  = '/educore/modules/exams/result.php?exam='.$eid.'&student='.$subRow['student_id'];
+                if ($exam['show_results']==='immediately') {
+                    pushNotification($subRow['user_id'],'grade',$notifTitle,$notifBody,$resultLink,$cid);
+                } else {
+                    pushNotification($subRow['user_id'],'grade',$notifTitle,'"'.$exam['title'].'" has been graded. Results will be visible once released.','',$cid);
+                }
+            }
         }
 
         $pdo->commit();
@@ -201,9 +217,16 @@ include __DIR__ . '/../../templates/layout.php';
             <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:5px;">
               Q<?=$q['sort_order']??$idx+1?> · <?=$q['points']?> pts max
             </div>
-            <div style="font-size:0.88rem;font-weight:500;color:var(--text-primary);margin-bottom:10px;">
+            <div style="font-size:0.88rem;font-weight:500;color:var(--text-primary);margin-bottom:<?=empty($q['question_image'])?'10px':'6px'?>;">
               <?=sanitize($q['question'])?>
             </div>
+            <?php if(!empty($q['question_image'])): ?>
+            <div style="margin-bottom:10px;">
+              <img src="<?=sanitize($q['question_image'])?>" alt="Question image"
+                   style="max-width:100%;max-height:200px;border-radius:var(--radius-sm);border:1px solid var(--border);object-fit:contain;cursor:pointer;"
+                   onclick="window.open(this.src,'_blank')" title="Click to enlarge">
+            </div>
+            <?php endif; ?>
             <?php if ($q['explanation']): ?>
             <div style="font-size:0.76rem;color:var(--info,#60a5fa);background:rgba(96,165,250,0.08);padding:6px 10px;border-radius:var(--radius-sm);margin-bottom:10px;">
               💡 <strong>Model answer:</strong> <?=sanitize($q['explanation'])?>

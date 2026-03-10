@@ -41,20 +41,56 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         $pts   = max(0.5, (float)($_POST['points'] ?? 1));
         $expl  = trim($_POST['explanation'] ?? '');
 
+        // Handle image upload
+        $imageUrl = null;
+        $removeImage = isset($_POST['remove_image']) && $_POST['remove_image'] === '1';
+        if (!$removeImage && isset($_FILES['q_image']) && $_FILES['q_image']['error'] === UPLOAD_ERR_OK) {
+            $file     = $_FILES['q_image'];
+            $allowed  = ['image/jpeg','image/png','image/gif','image/webp'];
+            $maxSize  = 5 * 1024 * 1024; // 5MB
+            if (in_array($file['type'],$allowed) && $file['size'] <= $maxSize) {
+                $ext      = pathinfo($file['name'], PATHINFO_EXTENSION);
+                $fname    = 'q_'.$cid.'_'.uniqid().'.'.$ext;
+                $uploadDir = __DIR__.'/../../uploads/question_images/';
+                if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+                if (move_uploaded_file($file['tmp_name'], $uploadDir.$fname)) {
+                    $imageUrl = '/educore/uploads/question_images/'.$fname;
+                    // Delete old image if editing
+                    if ($action==='edit_question' && $qid) {
+                        $oldImg = $pdo->prepare("SELECT question_image FROM exam_questions WHERE id=? AND exam_id=?");
+                        $oldImg->execute([$qid,$eid]);
+                        $oldPath = $oldImg->fetchColumn();
+                        if ($oldPath) @unlink(__DIR__.'/../../'.ltrim(str_replace('/educore/','',$oldPath),'/'));
+                    }
+                }
+            }
+        }
+
         if ($qtext) {
             if ($action==='add_question') {
-                // Get next sort order
                 $maxSort = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)+1 FROM exam_questions WHERE exam_id=?");
                 $maxSort->execute([$eid]);
                 $sort = $maxSort->fetchColumn();
-                $pdo->prepare("INSERT INTO exam_questions (exam_id,type,question,option_a,option_b,option_c,option_d,correct_answer,points,explanation,sort_order)
-                                VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-                    ->execute([$eid,$type,$qtext,$oa,$ob,$oc,$od,$ca,$pts,$expl,$sort]);
+                $pdo->prepare("INSERT INTO exam_questions (exam_id,type,question,question_image,option_a,option_b,option_c,option_d,correct_answer,points,explanation,sort_order)
+                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+                    ->execute([$eid,$type,$qtext,$imageUrl,$oa,$ob,$oc,$od,$ca,$pts,$expl,$sort]);
             } else {
-                $pdo->prepare("UPDATE exam_questions SET type=?,question=?,option_a=?,option_b=?,option_c=?,option_d=?,correct_answer=?,points=?,explanation=? WHERE id=? AND exam_id=?")
-                    ->execute([$type,$qtext,$oa,$ob,$oc,$od,$ca,$pts,$expl,$qid,$eid]);
+                if ($removeImage) {
+                    // Delete old image file
+                    $oldImg = $pdo->prepare("SELECT question_image FROM exam_questions WHERE id=? AND exam_id=?");
+                    $oldImg->execute([$qid,$eid]);
+                    $oldPath = $oldImg->fetchColumn();
+                    if ($oldPath) @unlink(__DIR__.'/../../'.ltrim(str_replace('/educore/','',$oldPath),'/'));
+                    $pdo->prepare("UPDATE exam_questions SET type=?,question=?,question_image=NULL,option_a=?,option_b=?,option_c=?,option_d=?,correct_answer=?,points=?,explanation=? WHERE id=? AND exam_id=?")
+                        ->execute([$type,$qtext,$oa,$ob,$oc,$od,$ca,$pts,$expl,$qid,$eid]);
+                } elseif ($imageUrl) {
+                    $pdo->prepare("UPDATE exam_questions SET type=?,question=?,question_image=?,option_a=?,option_b=?,option_c=?,option_d=?,correct_answer=?,points=?,explanation=? WHERE id=? AND exam_id=?")
+                        ->execute([$type,$qtext,$imageUrl,$oa,$ob,$oc,$od,$ca,$pts,$expl,$qid,$eid]);
+                } else {
+                    $pdo->prepare("UPDATE exam_questions SET type=?,question=?,option_a=?,option_b=?,option_c=?,option_d=?,correct_answer=?,points=?,explanation=? WHERE id=? AND exam_id=?")
+                        ->execute([$type,$qtext,$oa,$ob,$oc,$od,$ca,$pts,$expl,$qid,$eid]);
+                }
             }
-            // Update total_points
             $pdo->prepare("UPDATE exams SET total_points=(SELECT COALESCE(SUM(points),0) FROM exam_questions WHERE exam_id=?) WHERE id=?")->execute([$eid,$eid]);
         }
     }
@@ -182,6 +218,14 @@ include __DIR__ . '/../../templates/layout.php';
             </div>
             <!-- Question text -->
             <div style="font-weight:500;color:var(--text-primary);margin-bottom:8px;line-height:1.5;"><?=sanitize($q['question'])?></div>
+            <!-- Question image -->
+            <?php if(!empty($q['question_image'])): ?>
+            <div style="margin-bottom:8px;">
+              <img src="<?=sanitize($q['question_image'])?>" alt="Question image"
+                   style="max-width:100%;max-height:220px;border-radius:var(--radius-sm);border:1px solid var(--border);object-fit:contain;cursor:pointer;"
+                   onclick="window.open(this.src,'_blank')">
+            </div>
+            <?php endif; ?>
             <!-- Options -->
             <?php if($q['type']==='mcq'): ?>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
@@ -229,10 +273,11 @@ include __DIR__ . '/../../templates/layout.php';
       <button id="cancelEditBtn" onclick="cancelEdit()" class="btn btn-ghost btn-sm" style="display:none;">Cancel</button>
     </div>
     <div class="card-body">
-      <form method="POST" id="questionForm">
+      <form method="POST" id="questionForm" enctype="multipart/form-data">
         <?=csrf_field()?>
         <input type="hidden" name="action" value="add_question" id="formAction">
         <input type="hidden" name="question_id" id="formQuestionId" value="">
+        <input type="hidden" name="remove_image" id="removeImageFlag" value="0">
 
         <div class="form-group">
           <label class="form-label required">Type</label>
@@ -246,6 +291,40 @@ include __DIR__ . '/../../templates/layout.php';
         <div class="form-group">
           <label class="form-label required">Question</label>
           <textarea name="q_text" id="qText" class="form-control" rows="3" required placeholder="Enter the question…"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            Question Image
+            <span style="font-size:.7rem;color:var(--text-muted);font-weight:400;">(graph, diagram, screenshot — optional)</span>
+          </label>
+          <!-- Existing image preview (shown when editing) -->
+          <div id="existingImageWrap" style="display:none;margin-bottom:8px;position:relative;">
+            <img id="existingImagePreview" src="" alt="Current image"
+                 style="max-width:100%;max-height:160px;border-radius:var(--radius-sm);border:1px solid var(--border);object-fit:contain;">
+            <button type="button" onclick="removeExistingImage()"
+                    style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.75rem;line-height:1;"
+                    title="Remove image">✕</button>
+          </div>
+          <!-- New image input -->
+          <div id="newImageWrap">
+            <input type="file" name="q_image" id="qImage" accept="image/jpeg,image/png,image/gif,image/webp"
+                   style="display:none;" onchange="previewNewImage(this)">
+            <div id="imageDropZone"
+                 onclick="document.getElementById('qImage').click()"
+                 style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:16px;text-align:center;cursor:pointer;font-size:.78rem;color:var(--text-muted);transition:border-color .2s;"
+                 onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+              📸 Click to upload or drag an image here<br>
+              <span style="font-size:.68rem;">JPEG, PNG, GIF, WebP · max 5 MB</span>
+            </div>
+            <div id="newImagePreviewWrap" style="display:none;margin-top:8px;position:relative;">
+              <img id="newImagePreview" src="" alt="Preview"
+                   style="max-width:100%;max-height:140px;border-radius:var(--radius-sm);border:1px solid var(--border);object-fit:contain;">
+              <button type="button" onclick="clearNewImage()"
+                      style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.75rem;line-height:1;"
+                      title="Remove">✕</button>
+            </div>
+          </div>
         </div>
 
         <!-- MCQ options -->
@@ -361,6 +440,17 @@ function editQuestion(id, data) {
     if (data.type==='true_false') document.getElementById('correctTf').value  = data.correct_answer;
   }
   updateTypeUI(data.type);
+  // Populate image preview
+  clearNewImage();
+  document.getElementById('removeImageFlag').value = '0';
+  if (data.question_image) {
+    document.getElementById('existingImagePreview').src = data.question_image;
+    document.getElementById('existingImageWrap').style.display = 'block';
+    document.getElementById('imageDropZone').style.display = 'none';
+  } else {
+    document.getElementById('existingImageWrap').style.display = 'none';
+    document.getElementById('imageDropZone').style.display = '';
+  }
 }
 
 function cancelEdit() {
@@ -370,7 +460,36 @@ function cancelEdit() {
   document.getElementById('submitQBtn').textContent= 'Add Question';
   document.getElementById('cancelEditBtn').style.display = 'none';
   document.getElementById('questionForm').reset();
+  document.getElementById('removeImageFlag').value = '0';
+  clearNewImage();
+  document.getElementById('existingImageWrap').style.display = 'none';
+  document.getElementById('imageDropZone').style.display = '';
   updateTypeUI('mcq');
+}
+
+function previewNewImage(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      document.getElementById('newImagePreview').src = e.target.result;
+      document.getElementById('newImagePreviewWrap').style.display = 'block';
+      document.getElementById('imageDropZone').style.display = 'none';
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+function clearNewImage() {
+  document.getElementById('qImage').value = '';
+  document.getElementById('newImagePreview').src = '';
+  document.getElementById('newImagePreviewWrap').style.display = 'none';
+  document.getElementById('imageDropZone').style.display = '';
+}
+
+function removeExistingImage() {
+  document.getElementById('existingImageWrap').style.display = 'none';
+  document.getElementById('imageDropZone').style.display = '';
+  document.getElementById('removeImageFlag').value = '1';
 }
 
 function filterBank(q) {

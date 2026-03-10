@@ -211,7 +211,15 @@ include __DIR__ . '/../../templates/layout.php';
         <div style="display:flex;gap:12px;align-items:flex-start;">
           <div style="width:32px;height:32px;background:var(--bg-elevated);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.82rem;color:var(--text-muted);flex-shrink:0;"><?=$i+1?></div>
           <div style="flex:1;">
-            <div style="font-weight:500;color:var(--text-primary);font-size:0.95rem;line-height:1.5;margin-bottom:14px;"><?=sanitize($q['question'])?></div>
+            <div style="font-weight:500;color:var(--text-primary);font-size:0.95rem;line-height:1.5;margin-bottom:<?=empty($q['question_image'])?'14px':'8px'?>;"><?=sanitize($q['question'])?></div>
+            <?php if(!empty($q['question_image'])): ?>
+            <div style="margin-bottom:14px;">
+              <img src="<?=sanitize($q['question_image'])?>" alt="Question image"
+                   style="max-width:100%;max-height:300px;border-radius:var(--radius-sm);border:1px solid var(--border);object-fit:contain;cursor:pointer;display:block;"
+                   onclick="window.open(this.src,'_blank')" title="Click to enlarge">
+              <div style="font-size:.65rem;color:var(--text-muted);margin-top:3px;">🔍 Click image to enlarge</div>
+            </div>
+            <?php endif; ?>
 
             <?php if($q['type']==='mcq'): ?>
             <div style="display:flex;flex-direction:column;gap:8px;">

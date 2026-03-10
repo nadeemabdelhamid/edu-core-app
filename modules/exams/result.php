@@ -143,6 +143,22 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isRole('owner','teacher','assistant')
         $passed    = $pct >= $exam['passing_score'] ? 1 : 0;
         $pdo->prepare("UPDATE exam_submissions SET manual_score=?,total_score=?,percentage=?,passed=?,status='graded',graded_at=NOW(),graded_by=? WHERE id=?")
             ->execute([$manualScore,$total,$pct,$passed,$uid,$submission['id']]);
+
+        // Notify student
+        $stuUser = $pdo->prepare("SELECT s.user_id FROM students s WHERE s.id=?");
+        $stuUser->execute([$stId]);
+        $stuUserId = $stuUser->fetchColumn();
+        if ($stuUserId) {
+            $resultLabel = $passed ? '✓ Passed' : '✗ Failed';
+            if ($exam['show_results']==='immediately') {
+                pushNotification($stuUserId,'grade','Your exam has been graded',
+                    '"'.$exam['title'].'" — Score: '.round($pct).'% ('.$resultLabel.')',
+                    '/educore/modules/exams/result.php?exam='.$eid.'&student='.$stId, $cid);
+            } else {
+                pushNotification($stuUserId,'grade','Your exam has been graded',
+                    '"'.$exam['title'].'" has been graded. Results will be visible once released.','', $cid);
+            }
+        }
         flash('success','Grading saved.');
         redirect("result.php?exam=$eid&student=$stId");
     }

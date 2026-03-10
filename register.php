@@ -43,34 +43,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $slug = trim($slug, '-') . '-' . substr(uniqid(), -5);
 
             // Insert center
-            $pdo->prepare("INSERT INTO centers (name, slug, email, phone, status) VALUES (?,?,?,?,'trial')")
+            // Create center in 'pending' status — requires super_admin approval
+            $pdo->prepare("INSERT INTO centers (name, slug, email, phone, status) VALUES (?,?,?,?,'pending')")
                 ->execute([$data['center_name'], $slug, $data['email'], $data['phone']]);
             $centerId = $pdo->lastInsertId();
 
-            // Insert owner user
+            // Insert owner user with is_active=0 until approved
             $hashed = password_hash($data['password'], PASSWORD_BCRYPT);
-            $pdo->prepare("INSERT INTO users (center_id, name, email, password, role) VALUES (?,?,?,?,'owner')")
+            $pdo->prepare("INSERT INTO users (center_id, name, email, password, role, is_active) VALUES (?,?,?,?,'owner',0)")
                 ->execute([$centerId, $data['name'], $data['email'], $hashed]);
             $userId = $pdo->lastInsertId();
 
-            // Assign starter plan trial (14 days)
+            // Assign starter plan (inactive until approved)
             $planStmt = $pdo->prepare("SELECT id FROM plans WHERE slug='starter' LIMIT 1");
             $planStmt->execute();
             $planId = $planStmt->fetchColumn();
-
-            $pdo->prepare("INSERT INTO subscriptions (center_id, plan_id, status, starts_at, expires_at, trial_ends_at)
-                            VALUES (?,?,'trial',NOW(),DATE_ADD(NOW(), INTERVAL 14 DAY),DATE_ADD(NOW(), INTERVAL 14 DAY))")
-                ->execute([$centerId, $planId]);
+            if ($planId) {
+                $pdo->prepare("INSERT INTO subscriptions (center_id, plan_id, status, starts_at, expires_at, trial_ends_at)
+                                VALUES (?,?,'pending',NOW(),DATE_ADD(NOW(), INTERVAL 14 DAY),DATE_ADD(NOW(), INTERVAL 14 DAY))")
+                    ->execute([$centerId, $planId]);
+            }
 
             $pdo->commit();
 
-            // Auto-login
-            $userRow = $pdo->prepare("SELECT * FROM users WHERE id = ?");
-            $userRow->execute([$userId]);
-            login($userRow->fetch());
-
-            flash('success', 'Welcome to EduCore! Your 14-day trial has started.');
-            header('Location: /educore/dashboard.php');
+            // Do NOT auto-login — show pending message
+            flash('success', 'pending_approval');
+            header('Location: /educore/register.php?registered=1');
             exit;
         } catch (Exception $e) {
             $pdo->rollBack();
@@ -202,7 +200,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <h1 class="register-title">Create your center account</h1>
     <p class="register-sub">Get started in 60 seconds</p>
 
-    <?php if ($errors): ?>
+    <?php if (isset($_GET['registered'])): ?>
+    <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:var(--radius-sm);padding:20px 22px;font-size:0.88rem;color:var(--success);margin-bottom:20px;text-align:center;">
+      <div style="font-size:1.5rem;margin-bottom:8px;">🎉</div>
+      <div style="font-weight:700;font-size:1rem;margin-bottom:6px;">Registration submitted!</div>
+      <div style="color:var(--text-secondary);">Your account is <strong>pending review</strong> by our team. You will be able to log in once approved.<br>We typically review within 24 hours.</div>
+    </div>
+    <?php elseif ($errors): ?>
     <div style="background:var(--danger-dim); border:1px solid rgba(239,68,68,0.25); border-radius:var(--radius-sm); padding:12px 14px; font-size:0.82rem; color:var(--danger); margin-bottom:20px;">
       <?php foreach ($errors as $e): ?>
         <div>• <?= sanitize($e) ?></div>

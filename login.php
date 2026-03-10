@@ -28,12 +28,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if ($user && !$user['is_active']) {
-            $errors[] = 'This account has been suspended. Contact your administrator.';
+            // Check if center is pending approval
+            $cStmt = $pdo->prepare("SELECT status FROM centers WHERE id=? LIMIT 1");
+            $cStmt->execute([$user['center_id']]);
+            $centerStatus = $cStmt->fetchColumn();
+            if ($centerStatus === 'pending') {
+                $errors[] = 'Your account is pending approval by our team. You will be notified once approved.';
+            } else {
+                $errors[] = 'This account has been suspended. Contact your administrator.';
+            }
         } elseif ($user && password_verify($password, $user['password'])) {
-            login($user);
-            flash('success', 'Welcome back, ' . $user['name'] . '!');
-            header('Location: /educore/dashboard.php');
-            exit;
+            // Also block if center is pending (extra safety check)
+            $cStmt = $pdo->prepare("SELECT status FROM centers WHERE id=? LIMIT 1");
+            $cStmt->execute([$user['center_id']]);
+            $centerStatus = $cStmt->fetchColumn();
+            if ($centerStatus === 'pending' && $user['role'] !== 'super_admin') {
+                $errors[] = 'Your account is pending approval by our team. You will be notified once approved.';
+            } else {
+                login($user);
+                flash('success', 'Welcome back, ' . $user['name'] . '!');
+                header('Location: /educore/dashboard.php');
+                exit;
+            }
         } else {
             $errors[] = 'Invalid email or password.';
         }
