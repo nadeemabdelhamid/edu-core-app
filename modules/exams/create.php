@@ -33,10 +33,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     $startsAt    = $_POST['starts_at'] ? date('Y-m-d H:i:s', strtotime($_POST['starts_at'])) : null;
     $endsAt      = $_POST['ends_at']   ? date('Y-m-d H:i:s', strtotime($_POST['ends_at']))   : null;
     $showResults = in_array($_POST['show_results']??'',['immediately','after_close','manual']) ? $_POST['show_results'] : 'after_close';
-    $shuffle_q   = isset($_POST['shuffle_questions']) ? 1 : 0;
-    $shuffle_o   = isset($_POST['shuffle_options'])   ? 1 : 0;
-    $allow_review= isset($_POST['allow_review'])      ? 1 : 0;
-    $max_attempts= max(1, min(10, (int)($_POST['max_attempts'] ?? 1)));
+    $shuffle_q        = isset($_POST['shuffle_questions']) ? 1 : 0;
+    $shuffle_o        = isset($_POST['shuffle_options'])   ? 1 : 0;
+    $allow_review     = isset($_POST['allow_review'])      ? 1 : 0;
+    $max_attempts     = max(1, min(10, (int)($_POST['max_attempts'] ?? 1)));
+    $exam_password    = trim($_POST['exam_password'] ?? '') ?: null;
+    $force_fullscreen = isset($_POST['force_fullscreen']) ? 1 : 0;
+    $block_copy_paste = isset($_POST['block_copy_paste']) ? 1 : 0;
 
     if (!$title) $errors[] = 'Title is required.';
     if ($groupId) {
@@ -47,9 +50,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 
     if (!$errors) {
         $status = ($startsAt && strtotime($startsAt) > time()) ? 'scheduled' : 'draft';
-        $pdo->prepare("INSERT INTO exams (center_id,group_id,created_by,title,description,instructions,type,status,starts_at,ends_at,duration_minutes,passing_score,shuffle_questions,shuffle_options,show_results,allow_review,max_attempts)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-            ->execute([$cid,$groupId,$uid,$title,$description,$instructions,$type,$status,$startsAt,$endsAt,$duration,$passing,$shuffle_q,$shuffle_o,$showResults,$allow_review,$max_attempts]);
+        $pdo->prepare("INSERT INTO exams (center_id,group_id,created_by,title,description,instructions,type,status,starts_at,ends_at,duration_minutes,passing_score,shuffle_questions,shuffle_options,show_results,allow_review,max_attempts,exam_password,force_fullscreen,block_copy_paste)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            ->execute([$cid,$groupId,$uid,$title,$description,$instructions,$type,$status,$startsAt,$endsAt,$duration,$passing,$shuffle_q,$shuffle_o,$showResults,$allow_review,$max_attempts,$exam_password,$force_fullscreen,$block_copy_paste]);
         $examId = $pdo->lastInsertId();
         auditLog('exam.created','exam',$examId,['title'=>$title,'type'=>$type]);
         flash('success',"Exam created! Now add questions.");
@@ -175,6 +178,23 @@ include __DIR__ . '/../../templates/layout.php';
             <?=$label?>
           </label>
           <?php endforeach; ?>
+        </div>
+        <div class="form-group" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+          <label class="form-label">Security Settings</label>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.85rem;">
+              <input type="checkbox" name="force_fullscreen" <?=isset($_POST['force_fullscreen'])?'checked':''?> style="width:16px;height:16px;accent-color:var(--accent);">
+              🖥 Force fullscreen mode (exiting counts as violation)
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.85rem;">
+              <input type="checkbox" name="block_copy_paste" <?=isset($_POST['block_copy_paste'])?'checked':''?> style="width:16px;height:16px;accent-color:var(--accent);">
+              🚫 Block copy/paste and right-click
+            </label>
+            <div class="form-group" style="margin-bottom:0;margin-top:4px;">
+              <label class="form-label" style="font-size:.78rem;">Exam Password <span style="color:var(--text-muted);font-weight:400;">(leave blank for no password)</span></label>
+              <input type="text" name="exam_password" class="form-control" style="font-size:.84rem;" placeholder="e.g. math2025" value="<?=sanitize($_POST['exam_password']??'')?>">
+            </div>
+          </div>
         </div>
         <input type="hidden" name="_submitted" value="1">
         <button type="submit" class="btn btn-primary btn-lg w-full" style="margin-top:20px;">

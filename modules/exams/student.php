@@ -15,32 +15,36 @@ $stStmt->execute([$uid,$cid]);
 $student = $stStmt->fetch();
 if (!$student) { flash('error','Student profile not found.'); redirect('/educore/dashboard.php'); }
 
-// Check if is_hidden column exists (migration may not have run yet)
-try {
-    $colCheck = $pdo->query("SELECT is_hidden FROM exams LIMIT 1");
-    $hasHiddenCol = true;
-} catch (Exception $e) {
-    $hasHiddenCol = false;
-}
+// Safe column-existence checks (migrations may not have run yet)
+$hasHiddenCol = false;
+$hasOpenCol   = false;
+try { $pdo->query("SELECT is_hidden FROM exams LIMIT 1"); $hasHiddenCol = true; } catch (Exception $e) {}
+try { $pdo->query("SELECT is_open FROM exams LIMIT 1");   $hasOpenCol   = true; } catch (Exception $e) {}
 
 $hiddenFilter = $hasHiddenCol ? "AND COALESCE(e.is_hidden,0) = 0" : "";
+// Hide locked exams UNLESS the student already has a submission (so they can still see results)
+$openFilter   = $hasOpenCol ? "AND (COALESCE(e.is_open,1) = 1 OR e.status = 'closed' OR es.id IS NOT NULL)" : "";
 
 $examStmt = $pdo->prepare("
     SELECT e.*, g.name AS group_name,
            es.status AS my_status, es.percentage AS my_score, es.passed AS my_passed,
-           es.submitted_at AS my_submitted
+           es.submitted_at AS my_submitted, es.id AS my_sub_id
     FROM exams e
     LEFT JOIN `groups` g ON g.id=e.group_id
-    LEFT JOIN exam_submissions es ON es.exam_id=e.id AND es.student_id=?
-              AND es.status IN('submitted','graded','in_progress')
+    LEFT JOIN exam_submissions es
+           ON es.exam_id=e.id AND es.student_id=?
+          AND es.id = (SELECT id FROM exam_submissions
+                       WHERE exam_id=e.id AND student_id=?
+                       ORDER BY attempt_number DESC LIMIT 1)
     WHERE e.center_id=?
       AND e.status IN('active','closed')
       $hiddenFilter
+      $openFilter
       AND (e.group_id IS NULL
            OR EXISTS(SELECT 1 FROM group_students gs
                      WHERE gs.group_id=e.group_id AND gs.student_id=? AND gs.status='active'))
     ORDER BY FIELD(e.status,'active','closed'), e.starts_at DESC");
-$examStmt->execute([$student['id'],$cid,$student['id']]);
+$examStmt->execute([$student['id'],$student['id'],$cid,$student['id']]);
 $exams = $examStmt->fetchAll();
 
 // Auto-sync statuses

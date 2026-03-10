@@ -37,9 +37,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         $ob    = trim($_POST['opt_b'] ?? '');
         $oc    = trim($_POST['opt_c'] ?? '');
         $od    = trim($_POST['opt_d'] ?? '');
-        $ca    = trim($_POST['correct'] ?? '');
-        $pts   = max(0.5, (float)($_POST['points'] ?? 1));
-        $expl  = trim($_POST['explanation'] ?? '');
+        $ca         = trim($_POST['correct'] ?? '');
+        $pts        = max(0.5, (float)($_POST['points'] ?? 1));
+        $expl       = trim($_POST['explanation'] ?? '');
+        $isMulti    = isset($_POST['is_multi_select']) ? 1 : 0;
+        $multiCorr  = '';
+        if ($isMulti && !empty($_POST['correct_multi'])) {
+            $mcArr = array_filter(array_map('trim', (array)$_POST['correct_multi']));
+            sort($mcArr);
+            $multiCorr = implode(',', $mcArr);
+        }
 
         // Handle image upload
         $imageUrl = null;
@@ -71,9 +78,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 $maxSort = $pdo->prepare("SELECT COALESCE(MAX(sort_order),0)+1 FROM exam_questions WHERE exam_id=?");
                 $maxSort->execute([$eid]);
                 $sort = $maxSort->fetchColumn();
-                $pdo->prepare("INSERT INTO exam_questions (exam_id,type,question,question_image,option_a,option_b,option_c,option_d,correct_answer,points,explanation,sort_order)
-                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-                    ->execute([$eid,$type,$qtext,$imageUrl,$oa,$ob,$oc,$od,$ca,$pts,$expl,$sort]);
+                $pdo->prepare("INSERT INTO exam_questions (exam_id,type,question,question_image,option_a,option_b,option_c,option_d,correct_answer,correct_answers_multi,is_multi_select,points,explanation,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                    ->execute([$eid,$type,$qtext,$imageUrl,$oa,$ob,$oc,$od,$ca,$multiCorr,$isMulti,$pts,$expl,$sort]);
             } else {
                 if ($removeImage) {
                     // Delete old image file
@@ -87,8 +93,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     $pdo->prepare("UPDATE exam_questions SET type=?,question=?,question_image=?,option_a=?,option_b=?,option_c=?,option_d=?,correct_answer=?,points=?,explanation=? WHERE id=? AND exam_id=?")
                         ->execute([$type,$qtext,$imageUrl,$oa,$ob,$oc,$od,$ca,$pts,$expl,$qid,$eid]);
                 } else {
-                    $pdo->prepare("UPDATE exam_questions SET type=?,question=?,option_a=?,option_b=?,option_c=?,option_d=?,correct_answer=?,points=?,explanation=? WHERE id=? AND exam_id=?")
-                        ->execute([$type,$qtext,$oa,$ob,$oc,$od,$ca,$pts,$expl,$qid,$eid]);
+                    $pdo->prepare("UPDATE exam_questions SET type=?,question=?,option_a=?,option_b=?,option_c=?,option_d=?,correct_answer=?,correct_answers_multi=?,is_multi_select=?,points=?,explanation=? WHERE id=? AND exam_id=?")
+                        ->execute([$type,$qtext,$oa,$ob,$oc,$od,$ca,$multiCorr,$isMulti,$pts,$expl,$qid,$eid]);
                 }
             }
             $pdo->prepare("UPDATE exams SET total_points=(SELECT COALESCE(SUM(points),0) FROM exam_questions WHERE exam_id=?) WHERE id=?")->execute([$eid,$eid]);
@@ -343,6 +349,27 @@ include __DIR__ . '/../../templates/layout.php';
           </div>
         </div>
 
+        <!-- Multi-select toggle (MCQ only) -->
+        <div id="multiSelectWrap" style="display:none;">
+          <div style="margin-bottom:10px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:.82rem;cursor:pointer;">
+              <input type="checkbox" name="is_multi_select" id="isMultiSelect" style="width:15px;height:15px;accent-color:var(--accent);">
+              Multi-select (more than one correct answer)
+            </label>
+          </div>
+          <div id="multiCorrectWrap" style="display:none;margin-bottom:10px;">
+            <label class="form-label" style="font-size:.72rem;">Correct Answers (check all that apply)</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+              <?php foreach(['a'=>'A','b'=>'B','c'=>'C','d'=>'D'] as $k=>$l): ?>
+              <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;cursor:pointer;">
+                <input type="checkbox" name="correct_multi[]" value="<?=$k?>" id="mc_<?=$k?>" style="accent-color:var(--accent);">
+                Option <?=$l?>
+              </label>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        </div>
+
         <!-- True/False -->
         <div id="tfOptions" style="display:none;">
           <div class="form-group">
@@ -415,9 +442,17 @@ include __DIR__ . '/../../templates/layout.php';
 
 <script>
 function updateTypeUI(type) {
-  document.getElementById('mcqOptions').style.display = type==='mcq' ? '' : 'none';
-  document.getElementById('tfOptions').style.display  = type==='true_false' ? '' : 'none';
+  document.getElementById('mcqOptions').style.display      = type==='mcq' ? '' : 'none';
+  document.getElementById('tfOptions').style.display       = type==='true_false' ? '' : 'none';
+  document.getElementById('multiSelectWrap').style.display = type==='mcq' ? '' : 'none';
+  const isMSChecked = document.getElementById('isMultiSelect')?.checked;
+  if(document.getElementById('multiCorrectWrap'))
+    document.getElementById('multiCorrectWrap').style.display = (type==='mcq'&&isMSChecked) ? '' : 'none';
 }
+document.getElementById('isMultiSelect')?.addEventListener('change', function() {
+  document.getElementById('multiCorrectWrap').style.display = this.checked ? '' : 'none';
+  document.getElementById('correctMcq').closest('.form-group').style.display = this.checked ? 'none' : '';
+});
 
 function editQuestion(id, data) {
   document.getElementById('formAction').value      = 'edit_question';

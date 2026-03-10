@@ -49,11 +49,20 @@ document.querySelectorAll('.flash-msg').forEach(function(el) {
 // ─── NOTIFICATION PANEL ──────────────────────────────────
 function toggleNotifPanel() {
   const p = document.getElementById('notifPanel');
-  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  if (!p) return;
+  const opening = p.style.display === 'none';
+  p.style.display = opening ? 'block' : 'none';
+  if (opening) {
+    // Remove badge immediately on open
+    const badge = document.getElementById('notifBadge');
+    if (badge) badge.remove();
+    // Mark read on server
+    fetch('/educore/modules/settings/mark_read.php', {method:'POST', headers:{'X-CSRF-TOKEN': csrfToken}}).catch(()=>{});
+  }
 }
 function markAllRead() {
   fetch('/educore/modules/settings/mark_read.php', {method:'POST', headers:{'X-CSRF-TOKEN': csrfToken}});
-  document.getElementById('notifDot') && document.getElementById('notifDot').remove();
+  document.getElementById('notifBadge') && document.getElementById('notifBadge').remove();
   document.getElementById('notifPanel').querySelectorAll('[style*="border-bottom"]').forEach(el => el.remove());
   const list = document.getElementById('notifPanel').querySelector('[style*="max-height"]');
   if(list) list.innerHTML = '<div style="padding:24px 16px;text-align:center;color:var(--text-muted);font-size:0.8rem;">All caught up ✓</div>';

@@ -58,7 +58,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $shuffle_q   = isset($_POST['shuffle_questions']) ? 1 : 0;
     $shuffle_o   = isset($_POST['shuffle_options'])   ? 1 : 0;
     $allow_review= isset($_POST['allow_review'])      ? 1 : 0;
-    $max_attempts= max(1, min(10, (int)($_POST['max_attempts'] ?? 1)));
+    $max_attempts     = max(1, min(10, (int)($_POST['max_attempts'] ?? 1)));
+    $exam_password    = trim($_POST['exam_password'] ?? '') ?: null;
+    $force_fullscreen = isset($_POST['force_fullscreen']) ? 1 : 0;
+    $block_copy_paste = isset($_POST['block_copy_paste']) ? 1 : 0;
 
     if (!$title) $errors[] = 'Title is required.';
 
@@ -68,11 +71,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("UPDATE exams SET
                 title=?, description=?, instructions=?,
                 ends_at=?, passing_score=?, show_results=?,
-                allow_review=?, max_attempts=?
+                allow_review=?, max_attempts=?,
+                exam_password=?, force_fullscreen=?, block_copy_paste=?
                 WHERE id=? AND center_id=?")
                 ->execute([$title,$description,$instructions,
                            $endsAt,$passing,$showResults,
                            $allow_review,$max_attempts,
+                           $exam_password,$force_fullscreen,$block_copy_paste,
                            $eid,$cid]);
         } else {
             // Draft/scheduled: full edit
@@ -80,12 +85,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 title=?, description=?, instructions=?, type=?, group_id=?,
                 duration_minutes=?, passing_score=?, starts_at=?, ends_at=?,
                 show_results=?, shuffle_questions=?, shuffle_options=?,
-                allow_review=?, max_attempts=?
+                allow_review=?, max_attempts=?,
+                exam_password=?, force_fullscreen=?, block_copy_paste=?
                 WHERE id=? AND center_id=?")
                 ->execute([$title,$description,$instructions,$type,$groupId,
                            $duration,$passing,$startsAt,$endsAt,
                            $showResults,$shuffle_q,$shuffle_o,
                            $allow_review,$max_attempts,
+                           $exam_password,$force_fullscreen,$block_copy_paste,
                            $eid,$cid]);
         }
         auditLog('exam.updated','exam',$eid,['title'=>$title]);
@@ -269,6 +276,28 @@ include __DIR__ . '/../../templates/layout.php';
             <?=$label?>
           </label>
           <?php endforeach; ?>
+        </div>
+
+        <div class="form-group" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+          <label class="form-label">Security Settings</label>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.85rem;">
+              <input type="checkbox" name="force_fullscreen" <?=$exam['force_fullscreen']??0?'checked':''?>
+                     style="width:16px;height:16px;accent-color:var(--accent);">
+              🖥 Force fullscreen mode
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.85rem;">
+              <input type="checkbox" name="block_copy_paste" <?=$exam['block_copy_paste']??0?'checked':''?>
+                     style="width:16px;height:16px;accent-color:var(--accent);">
+              🚫 Block copy/paste and right-click
+            </label>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" style="font-size:.78rem;">Exam Password <span style="font-weight:400;color:var(--text-muted);">(blank = no password)</span></label>
+              <input type="text" name="exam_password" class="form-control" style="font-size:.84rem;"
+                     placeholder="Leave blank for no password"
+                     value="<?=sanitize($exam['exam_password']??'')?>">
+            </div>
+          </div>
         </div>
 
         <div style="display:flex;gap:10px;margin-top:24px;">

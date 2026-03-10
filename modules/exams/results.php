@@ -4,6 +4,7 @@ requireRole('owner','teacher','assistant');
 
 $pdo = getDB();
 $cid = centerId();
+$uid = authId();
 $eid = (int)($_GET['id'] ?? 0);
 if (!$eid) redirect('/educore/modules/exams/');
 
@@ -36,6 +37,27 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     if ($action==='release_results') {
         $pdo->prepare("UPDATE exams SET show_results='immediately' WHERE id=? AND center_id=?")->execute([$eid,$cid]);
         flash('success','Results released to students.');
+    }
+    // Feature 20: Grant reopen to specific student
+    if ($action==='grant_reopen') {
+        $stId   = (int)$_POST['student_id'];
+        $reason = trim($_POST['reason'] ?? '');
+        try {
+            // Invalidate any existing unused reopen
+            $pdo->prepare("DELETE FROM exam_reopens WHERE exam_id=? AND student_id=? AND used=0")->execute([$eid,$stId]);
+            $pdo->prepare("INSERT INTO exam_reopens (exam_id,student_id,center_id,granted_by,reason) VALUES (?,?,?,?,?)")
+                ->execute([$eid,$stId,$cid,$uid,$reason]);
+            // Notify student
+            $stuUser = $pdo->prepare("SELECT s.user_id,s.name FROM students s WHERE s.id=?");
+            $stuUser->execute([$stId]);
+            $stuRow = $stuUser->fetch();
+            if ($stuRow && $stuRow['user_id']) {
+                pushNotification($stuRow['user_id'],'reopen','Exam re-opened for you',
+                    'Your teacher has granted you a new attempt for "'.sanitize($exam['title']).'". You can start it now.',
+                    '/educore/modules/exams/student.php', $cid);
+            }
+            flash('success','Reopen granted. Student can now take the exam again.');
+        } catch(Exception $e) { flash('error','Failed to grant reopen.'); }
     }
     redirect("results.php?id=$eid");
 }
@@ -216,9 +238,18 @@ include __DIR__ . '/../../templates/layout.php';
             <?php endif; ?>
           </td>
           <td style="text-align:right;">
-            <a href="result.php?exam=<?=$eid?>&student=<?=$s['student_id']?>" class="btn btn-ghost btn-icon btn-sm">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            </a>
+            <div style="display:flex;gap:4px;justify-content:flex-end;align-items:center;">
+              <a href="result.php?exam=<?=$eid?>&student=<?=$s['student_id']?>" class="btn btn-ghost btn-icon btn-sm" title="View result">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </a>
+              <?php if(in_array($s['status'],['submitted','graded'])): ?>
+              <button class="btn btn-ghost btn-icon btn-sm" title="Grant reopen"
+                      onclick="openReopenModal(<?=$s['student_id']?>, '<?=addslashes(sanitize($s['student_name']))?>')"
+                      style="color:var(--accent);">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
+              </button>
+              <?php endif; ?>
+            </div>
           </td>
         </tr>
         <?php endforeach; ?>
@@ -266,6 +297,42 @@ function filterTable(q) {
   document.querySelectorAll('#resultsTable tbody tr').forEach(row => {
     row.style.display = row.dataset.name?.includes(q) ? '' : 'none';
   });
+}
+</script>
+
+<!-- Feature 20: Reopen modal -->
+<div class="modal-backdrop" id="reopenModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Grant Reopen Access</span>
+      <button class="modal-close" onclick="closeModal('reopenModal')">✕</button>
+    </div>
+    <form method="POST">
+      <div class="modal-body">
+        <?=csrf_field()?>
+        <input type="hidden" name="action" value="grant_reopen">
+        <input type="hidden" name="student_id" id="reopenStudentId">
+        <p style="font-size:.84rem;color:var(--text-muted);margin-bottom:14px;">
+          Allow <strong id="reopenStudentName" style="color:var(--text-primary);"></strong> to take this exam again.
+          They will receive a notification.
+        </p>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Reason <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+          <input type="text" name="reason" class="form-control" placeholder="e.g. Technical issue during exam">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('reopenModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Grant Reopen</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function openReopenModal(id, name) {
+  document.getElementById('reopenStudentId').value = id;
+  document.getElementById('reopenStudentName').textContent = name;
+  openModal('reopenModal');
 }
 </script>
 

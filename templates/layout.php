@@ -170,15 +170,15 @@ $sectionLabels = [
 
       <div class="topbar-actions">
         <?php
-          $notifCount = !isRole('student') ? unreadCount(authId()) : 0;
+          $notifCount = unreadCount(authId()); // all roles including students
           $trialLeft  = (!isRole('super_admin','student') && $user['center_id']) ? trialDaysLeft() : null;
           $subInfo    = (!isRole('super_admin','student') && $user['center_id']) ? getSubscription() : null;
         ?>
         <div style="position:relative;">
-          <button class="topbar-btn" title="Notifications" onclick="toggleNotifPanel()" id="notifBtn">
+          <button class="topbar-btn" title="Notifications" onclick="toggleNotifPanel()" id="notifBtn" style="position:relative;">
             <?= navIcon('bell') ?>
             <?php if($notifCount > 0): ?>
-            <span class="notif-dot" id="notifDot"></span>
+            <span id="notifBadge" style="position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;font-size:0.6rem;font-weight:800;min-width:16px;height:16px;border-radius:99px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1;border:2px solid var(--bg-surface);"><?= $notifCount > 99 ? '99+' : $notifCount ?></span>
             <?php endif; ?>
           </button>
           <div id="notifPanel" style="display:none;position:absolute;right:0;top:44px;width:300px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);z-index:200;">
