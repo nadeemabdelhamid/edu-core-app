@@ -298,3 +298,63 @@ function unreadCount($userId) {
         return (int)$s->fetchColumn();
     } catch (Exception $e) { return 0; }
 }
+
+// ─── VIDEO HELPERS ────────────────────────────────────────────
+
+/**
+ * Build an embeddable iframe src URL for a given provider + video ID.
+ *
+ * @param  string $provider  'youtube' or 'vimeo'
+ * @param  string $videoId   Provider video ID (e.g. dQw4w9WgXcQ)
+ * @return string            Embed URL safe to use as iframe src
+ */
+function videoEmbedUrl(string $provider, string $videoId): string {
+    return match($provider) {
+        'youtube' => "https://www.youtube.com/embed/{$videoId}?rel=0&modestbranding=1",
+        'vimeo'   => "https://player.vimeo.com/video/{$videoId}?dnt=1",
+        default   => '#',
+    };
+}
+
+/**
+ * Parse a YouTube or Vimeo URL and return [$provider, $videoId].
+ * Returns null if the URL is not recognised.
+ *
+ * Supports:
+ *   YouTube – https://www.youtube.com/watch?v=ID
+ *             https://youtu.be/ID
+ *             https://youtube.com/shorts/ID
+ *   Vimeo   – https://vimeo.com/ID
+ *             https://vimeo.com/channels/channel/ID
+ *
+ * @param  string     $url  Raw URL pasted by teacher
+ * @return array|null       ['youtube'|'vimeo', videoId] or null on failure
+ */
+function videoIdFromUrl(string $url): ?array {
+    // YouTube: standard watch, youtu.be short link, or Shorts
+    if (preg_match('%youtu(?:be\.com/(?:watch\?v=|shorts/)|\.be/)([\w-]{11})%', $url, $m)) {
+        return ['youtube', $m[1]];
+    }
+
+    // Vimeo: vimeo.com/ID  or  vimeo.com/channels/*/ID  or  vimeo.com/groups/*/videos/ID
+    if (preg_match('%vimeo\.com/(?:(?:channels|groups)/[^/]+/)?(?:videos?/)?(\d+)%', $url, $m)) {
+        return ['vimeo', $m[1]];
+    }
+
+    return null; // unrecognised URL
+}
+
+/**
+ * Build the YouTube thumbnail URL for a given video ID.
+ * Returns an empty string for Vimeo (thumbnail must be fetched via API or left blank).
+ *
+ * @param  string $provider
+ * @param  string $videoId
+ * @return string
+ */
+function videoThumbnailUrl(string $provider, string $videoId): string {
+    if ($provider === 'youtube') {
+        return "https://img.youtube.com/vi/{$videoId}/hqdefault.jpg";
+    }
+    return ''; // Vimeo thumbnails require an API call — handled in create.php
+}

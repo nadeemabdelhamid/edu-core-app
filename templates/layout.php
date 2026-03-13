@@ -24,6 +24,7 @@ if ($user['role'] === 'student') {
             ['href' => '/educore/modules/students/home.php',             'icon' => 'grid',         'label' => 'My Dashboard',  'key' => 'student_home'],
             ['href' => '/educore/modules/attendance/submit.php',         'icon' => 'check-square', 'label' => 'Attendance',    'key' => 'attendance'],
             ['href' => '/educore/modules/exams/student.php',             'icon' => 'file-text',    'label' => 'My Exams',      'key' => 'exams'],
+            ['href' => '/educore/modules/students/videos.php',           'icon' => 'play-circle',  'label' => 'Lectures',      'key' => 'videos', 'feature' => 'videos'],
         ],
         'account' => [
             ['href' => '/educore/modules/students/profile.php',          'icon' => 'user',         'label' => 'My Profile',    'key' => 'student_profile'],
@@ -39,6 +40,7 @@ if ($user['role'] === 'student') {
         ],
         'academic' => [
             ['href' => '/educore/modules/exams/',         'icon' => 'file-text',    'label' => 'Exams',       'key' => 'exams'],
+            ['href' => '/educore/modules/videos/',        'icon' => 'play-circle',  'label' => 'Videos',      'key' => 'videos', 'feature' => 'videos'],
             ['href' => '/educore/modules/payments/',      'icon' => 'dollar-sign',  'label' => 'Payments',    'key' => 'payments'],
             ['href' => '/educore/modules/reports/',       'icon' => 'bar-chart-2',  'label' => 'Reports',     'key' => 'reports'],
         ],
@@ -75,6 +77,7 @@ function navIcon($name) {
         'log-out' => '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
         'chevron-right' => '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>',
         'x' => '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+        'play-circle' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>',
     ];
     return $icons[$name] ?? '';
 }
@@ -112,6 +115,12 @@ $sectionLabels = [
       <div class="nav-section">
         <div class="nav-section-label"><?= $sectionLabels[$section] ?></div>
         <?php foreach ($items as $item): ?>
+          <?php
+            // Skip items that require a plan feature the current center doesn't have
+            if (!empty($item['feature']) && !isRole('super_admin') && !hasFeature($item['feature'])) {
+                continue;
+            }
+          ?>
           <a href="<?= $item['href'] ?>"
              class="nav-item <?= ($activePage ?? '') === $item['key'] ? 'active' : '' ?>">
             <span class="nav-icon"><?= navIcon($item['icon']) ?></span>
