@@ -107,7 +107,7 @@ $sectionLabels = [
   <aside class="sidebar" id="sidebar">
     <a href="/educore/dashboard.php" class="sidebar-brand">
       <div class="brand-icon">🎓</div>
-      <span class="brand-text">Edu<span>Core</span></span>
+      <span class="brand-text">By<span>Nadeem</span></span>
     </a>
 
     <nav class="sidebar-nav">
@@ -154,67 +154,117 @@ $sectionLabels = [
   <!-- MAIN -->
   <div class="main-content">
 
-    <!-- TOPBAR -->
+    <!-- TOPBAR / NAVBAR -->
     <header class="topbar">
-      <button class="topbar-btn" id="menuToggle" onclick="toggleSidebar()" style="display:none">
-        <?= navIcon('menu') ?>
-      </button>
 
-      <?php if (!empty($breadcrumbs)): ?>
-      <nav class="breadcrumb">
-        <?php foreach ($breadcrumbs as $i => $crumb): ?>
-          <?php if ($i > 0): ?><span class="sep"><?= navIcon('chevron-right') ?></span><?php endif; ?>
-          <?php if (isset($crumb['href']) && $i < count($breadcrumbs) - 1): ?>
-            <a href="<?= $crumb['href'] ?>"><?= sanitize($crumb['label']) ?></a>
-          <?php else: ?>
-            <span class="current"><?= sanitize($crumb['label']) ?></span>
-          <?php endif; ?>
-        <?php endforeach; ?>
-      </nav>
-      <?php else: ?>
-      <span class="topbar-title"><?= sanitize($pageTitle ?? 'Dashboard') ?></span>
-      <?php endif; ?>
+      <!-- Left: hamburger + breadcrumb / page title -->
+      <div class="topbar-left">
+        <button class="topbar-btn topbar-menu-btn" id="menuToggle" onclick="toggleSidebar()" title="Toggle menu" style="display:none">
+          <?= navIcon('menu') ?>
+        </button>
+        <?php if (!empty($breadcrumbs)): ?>
+        <nav class="breadcrumb">
+          <?php foreach ($breadcrumbs as $i => $crumb): ?>
+            <?php if ($i > 0): ?><span class="sep"><?= navIcon('chevron-right') ?></span><?php endif; ?>
+            <?php if (isset($crumb['href']) && $i < count($breadcrumbs) - 1): ?>
+              <a href="<?= $crumb['href'] ?>"><?= sanitize($crumb['label']) ?></a>
+            <?php else: ?>
+              <span class="current"><?= sanitize($crumb['label']) ?></span>
+            <?php endif; ?>
+          <?php endforeach; ?>
+        </nav>
+        <?php else: ?>
+        <span class="topbar-title"><?= sanitize($pageTitle ?? 'Dashboard') ?></span>
+        <?php endif; ?>
+      </div>
 
-      <div class="topbar-spacer"></div>
+      <!-- Centre: search bar -->
+      <div class="topbar-search-wrap">
+        <div class="topbar-search" onclick="document.getElementById('topbarSearchInput').focus()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;color:var(--text-muted)"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="text" placeholder="Search anything…" id="topbarSearchInput" autocomplete="off"
+                 onfocus="topbarSearchOpen()" oninput="topbarSearchQuery(this.value)">
+          <kbd class="topbar-search-kbd">⌘K</kbd>
+        </div>
+        <div id="topbarSearchDrop" class="topbar-search-drop" style="display:none;">
+          <div class="tsd-section">Quick links</div>
+          <a class="tsd-item" href="/educore/dashboard.php"><span class="tsd-icon"><?= navIcon('grid') ?></span>Dashboard</a>
+          <a class="tsd-item" href="/educore/modules/students/"><span class="tsd-icon"><?= navIcon('users') ?></span>Students</a>
+          <a class="tsd-item" href="/educore/modules/exams/"><span class="tsd-icon"><?= navIcon('file-text') ?></span>Exams</a>
+          <a class="tsd-item" href="/educore/modules/payments/"><span class="tsd-icon"><?= navIcon('dollar-sign') ?></span>Payments</a>
+          <a class="tsd-item" href="/educore/modules/reports/"><span class="tsd-icon"><?= navIcon('bar-chart-2') ?></span>Reports</a>
+        </div>
+      </div>
 
+      <!-- Right: actions -->
       <div class="topbar-actions">
         <?php
-          $notifCount = unreadCount(authId()); // all roles including students
+          $notifCount = unreadCount(authId());
           $trialLeft  = (!isRole('super_admin','student') && $user['center_id']) ? trialDaysLeft() : null;
           $subInfo    = (!isRole('super_admin','student') && $user['center_id']) ? getSubscription() : null;
         ?>
+
+        <?php if($subInfo): ?>
+          <span class="plan-badge plan-<?=$subInfo['plan_slug']?>"><?=sanitize($subInfo['plan_name'])?></span>
+        <?php endif; ?>
+
+        <!-- Notifications -->
         <div style="position:relative;">
-          <button class="topbar-btn" title="Notifications" onclick="toggleNotifPanel()" id="notifBtn" style="position:relative;">
+          <button class="topbar-btn" title="Notifications" onclick="toggleNotifPanel()" id="notifBtn">
             <?= navIcon('bell') ?>
             <?php if($notifCount > 0): ?>
-            <span id="notifBadge" style="position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;font-size:0.6rem;font-weight:800;min-width:16px;height:16px;border-radius:99px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1;border:2px solid var(--bg-surface);"><?= $notifCount > 99 ? '99+' : $notifCount ?></span>
+            <span id="notifBadge" class="topbar-notif-badge"><?= $notifCount > 99 ? '99+' : $notifCount ?></span>
             <?php endif; ?>
           </button>
-          <div id="notifPanel" style="display:none;position:absolute;right:0;top:44px;width:300px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);z-index:200;">
-            <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-              <span style="font-family:var(--font-display);font-size:0.88rem;font-weight:600;">Notifications</span>
-              <?php if($notifCount>0): ?><a href="#" onclick="markAllRead();return false;" style="font-size:0.72rem;color:var(--accent);text-decoration:none;">Mark all read</a><?php endif; ?>
+          <div id="notifPanel" class="notif-panel" style="display:none;">
+            <div class="notif-panel-head">
+              <span style="font-size:0.88rem;font-weight:700;">Notifications</span>
+              <?php if($notifCount>0): ?>
+              <a href="#" onclick="markAllRead();return false;" class="notif-mark-read">Mark all read</a>
+              <?php endif; ?>
             </div>
-            <div style="max-height:280px;overflow-y:auto;">
+            <div class="notif-panel-body">
               <?php $notifs=getUnreadNotifications(authId(),8);
               if($notifs): foreach($notifs as $n): ?>
-              <div style="padding:11px 16px;border-bottom:1px solid var(--border);font-size:0.8rem;">
-                <div style="font-weight:600;color:var(--text-primary);margin-bottom:2px;"><?=sanitize($n['title'])?></div>
-                <?php if($n['body']): ?><div style="color:var(--text-muted);font-size:0.74rem;"><?=sanitize($n['body'])?></div><?php endif; ?>
-                <div style="color:var(--text-muted);font-size:0.68rem;margin-top:3px;"><?=date('M j, g:i a',strtotime($n['created_at']))?></div>
+              <div class="notif-item">
+                <div class="notif-item-title"><?=sanitize($n['title'])?></div>
+                <?php if($n['body']): ?><div class="notif-item-body"><?=sanitize($n['body'])?></div><?php endif; ?>
+                <div class="notif-item-time"><?=date('M j, g:i a',strtotime($n['created_at']))?></div>
               </div>
               <?php endforeach; else: ?>
-              <div style="padding:24px 16px;text-align:center;color:var(--text-muted);font-size:0.8rem;">All caught up ✓</div>
+              <div class="notif-empty">All caught up ✓</div>
               <?php endif; ?>
             </div>
           </div>
         </div>
-        <?php if($subInfo): ?>
-          <span class="plan-badge plan-<?=$subInfo['plan_slug']?>"><?=sanitize($subInfo['plan_name'])?></span>
-        <?php endif; ?>
+
         <?php if(isRole('owner') && $user['center_id']): ?>
         <a href="/educore/modules/settings/" class="topbar-btn" title="Settings"><?=navIcon('settings')?></a>
         <?php endif; ?>
+
+        <!-- User avatar chip -->
+        <div class="topbar-user-chip" onclick="toggleUserMenu()" title="Account">
+          <div class="topbar-avatar" style="background:<?= $userColor ?>;"><?= $initials ?></div>
+          <span class="topbar-user-name"><?= sanitize($user['name']) ?></span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="opacity:0.5"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div id="userMenu" class="topbar-user-menu" style="display:none;">
+          <div class="tum-header">
+            <div class="tum-avatar" style="background:<?= $userColor ?>;"><?= $initials ?></div>
+            <div>
+              <div class="tum-name"><?= sanitize($user['name']) ?></div>
+              <div class="tum-role"><?= str_replace('_',' ',$user['role']) ?></div>
+            </div>
+          </div>
+          <div class="tum-divider"></div>
+          <?php if(isRole('owner') && $user['center_id']): ?>
+          <a href="/educore/modules/settings/" class="tum-item"><?= navIcon('settings') ?> Settings</a>
+          <?php endif; ?>
+          <a href="/educore/modules/settings/security.php" class="tum-item"><?= navIcon('user') ?> Profile</a>
+          <div class="tum-divider"></div>
+          <a href="/educore/logout.php" class="tum-item tum-item-danger"><?= navIcon('log-out') ?> Sign out</a>
+        </div>
+
       </div>
     </header>
 
@@ -227,14 +277,11 @@ $sectionLabels = [
     </div>
     <?php endif; ?>
 
-    <!-- FLASH MESSAGES -->
+    <!-- FLASH MESSAGES — picked up by toast system in layout_end.php -->
     <?php if ($flashMessages): ?>
-    <div class="flash-container" id="flashContainer">
+    <div id="ec-flash-source" style="display:none">
       <?php foreach ($flashMessages as $msg): ?>
-      <div class="flash-msg flash-<?= $msg['type'] ?>" onclick="this.remove()">
-        <span><?= sanitize($msg['message']) ?></span>
-        <span style="margin-left:auto; opacity:0.6"><?= navIcon('x') ?></span>
-      </div>
+      <span data-flash-type="<?= $msg['type'] ?>" data-flash-msg="<?= htmlspecialchars(sanitize($msg['message']), ENT_QUOTES) ?>"></span>
       <?php endforeach; ?>
     </div>
     <?php endif; ?>

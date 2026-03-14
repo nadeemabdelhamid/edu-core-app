@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       top: -30%; left: 50%;
       transform: translateX(-50%);
       width: 800px; height: 600px;
-      background: radial-gradient(ellipse, rgba(245,166,35,0.06) 0%, transparent 70%);
+      background: radial-gradient(ellipse, rgba(82,71,230,0.06) 0%, transparent 70%);
       pointer-events: none;
       z-index: 0;
     }
@@ -116,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       position: absolute;
       bottom: -80px; right: -80px;
       width: 300px; height: 300px;
-      background: radial-gradient(circle, rgba(245,166,35,0.08) 0%, transparent 70%);
+      background: radial-gradient(circle, rgba(82,71,230,0.08) 0%, transparent 70%);
     }
 
     .panel-logo {
@@ -128,11 +128,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     .panel-logo-icon {
       width: 42px; height: 42px;
-      background: linear-gradient(135deg, var(--accent), #e0751f);
+      background: var(--accent);
       border-radius: 10px;
       display: flex; align-items: center; justify-content: center;
       font-size: 20px;
-      box-shadow: 0 0 24px rgba(245,166,35,0.3);
+      box-shadow: 0 0 24px rgba(82,71,230,0.3);
     }
 
     .panel-logo-text {
