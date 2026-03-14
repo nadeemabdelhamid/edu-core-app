@@ -37,21 +37,38 @@ $teachers = $tStmt->fetchAll();
 
 $errors = [];
 $data   = $group ?? [];
-$days   = [];
-$time   = '';
 
-// Parse existing schedule
+// Parse existing schedule — new format: [{day, time}] or old format {days:[],time:''}
+$scheduleSlots = []; // array of {day, time}
 if (!empty($group['schedule'])) {
     $sched = json_decode($group['schedule'], true) ?? [];
-    $days  = $sched['days'] ?? [];
-    $time  = $sched['time'] ?? '';
+    // New format: array of slots
+    if (isset($sched[0]) && is_array($sched[0])) {
+        $scheduleSlots = $sched;
+    } elseif (isset($sched['days']) || isset($sched['time'])) {
+        // Old single-time format — migrate to multi-slot
+        $oldDays = $sched['days'] ?? [];
+        $oldTime = $sched['time'] ?? '';
+        foreach ($oldDays as $d) {
+            $scheduleSlots[] = ['day' => $d, 'time' => $oldTime];
+        }
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
 
-    $days = $_POST['days'] ?? [];
-    $time = trim($_POST['time'] ?? '');
+    // Collect schedule slots from POST
+    $slotDays  = $_POST['slot_day']  ?? [];
+    $slotTimes = $_POST['slot_time'] ?? [];
+    $scheduleSlots = [];
+    foreach ($slotDays as $i => $day) {
+        $day  = trim($day);
+        $time = trim($slotTimes[$i] ?? '');
+        if ($day !== '') {
+            $scheduleSlots[] = ['day' => $day, 'time' => $time];
+        }
+    }
 
     $data = [
         'name'        => trim($_POST['name'] ?? ''),
@@ -63,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'start_date'  => $_POST['start_date'] ?? null,
         'end_date'    => $_POST['end_date'] ?? null,
         'is_active'   => isset($_POST['is_active']) ? 1 : 0,
-        'schedule'    => json_encode(['days' => $days, 'time' => $time]),
+        'schedule'    => json_encode($scheduleSlots),
     ];
 
     if (!$data['name']) $errors[] = 'Group name is required.';
@@ -90,8 +107,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newId = $pdo->lastInsertId();
             auditLog('group.created', 'group', $newId, ['name' => $data['name']]);
             flash('success', 'Group created successfully.');
-
-            // Offer to enroll students
             redirect("/educore/modules/groups/enroll.php?id=$newId&new=1");
         }
         redirect('/educore/modules/groups/');
@@ -120,7 +135,7 @@ include __DIR__ . '/../../templates/layout.php';
 </div>
 <?php endif; ?>
 
-<form method="POST" action="">
+<form method="POST" action="" id="groupForm">
   <?= csrf_field() ?>
 
   <div style="display:grid; grid-template-columns:2fr 1fr; gap:20px; align-items:start;">
@@ -189,34 +204,76 @@ include __DIR__ . '/../../templates/layout.php';
         </div>
       </div>
 
-      <!-- Schedule -->
+      <!-- Schedule — Multi-slot (day + time per row) -->
       <div class="card">
-        <div class="card-header"><span class="card-title">Weekly Schedule</span></div>
+        <div class="card-header">
+          <span class="card-title">📅 Weekly Schedule</span>
+          <span style="font-size:0.76rem;color:var(--text-muted);">Add one row per class session</span>
+        </div>
         <div class="card-body">
-          <div class="form-group">
-            <label class="form-label">Class Days</label>
-            <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:4px;">
-              <?php foreach ($dayOptions as $day): ?>
-              <label style="display:flex; align-items:center; gap:6px; padding:7px 12px;
-                             background:var(--bg-elevated); border:1px solid var(--border);
-                             border-radius:var(--radius-sm); cursor:pointer; font-size:0.82rem;
-                             transition:all 0.15s; user-select:none;"
-                     id="lbl_<?= $day ?>">
-                <input type="checkbox" name="days[]" value="<?= $day ?>"
-                       <?= in_array($day, $days) ? 'checked':'' ?>
-                       onchange="toggleDay(this, '<?= $day ?>')"
-                       style="accent-color:var(--accent); width:14px; height:14px;">
-                <?= $day ?>
-              </label>
+
+          <div id="scheduleSlots">
+            <?php if (!empty($scheduleSlots)): ?>
+              <?php foreach ($scheduleSlots as $i => $slot): ?>
+              <div class="schedule-slot" style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:10px;">
+                <div class="form-group" style="margin:0;">
+                  <?php if ($i === 0): ?><label class="form-label">Day</label><?php endif; ?>
+                  <select name="slot_day[]" class="form-control">
+                    <option value="">Select day…</option>
+                    <?php foreach ($dayOptions as $d): ?>
+                    <option value="<?= $d ?>" <?= ($slot['day'] ?? '') === $d ? 'selected' : '' ?>><?= $d ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <?php if ($i === 0): ?><label class="form-label">Time</label><?php endif; ?>
+                  <input type="time" name="slot_time[]" class="form-control"
+                         value="<?= sanitize($slot['time'] ?? '') ?>">
+                </div>
+                <div>
+                  <?php if ($i === 0): ?><label class="form-label" style="visibility:hidden;">X</label><?php endif; ?>
+                  <button type="button" onclick="removeSlot(this)" class="btn btn-ghost btn-icon"
+                          style="color:var(--danger);<?= count($scheduleSlots) <= 1 ? 'visibility:hidden;' : '' ?>" title="Remove">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+              </div>
               <?php endforeach; ?>
-            </div>
+            <?php else: ?>
+              <!-- Default one empty slot -->
+              <div class="schedule-slot" style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:10px;">
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">Day</label>
+                  <select name="slot_day[]" class="form-control">
+                    <option value="">Select day…</option>
+                    <?php foreach ($dayOptions as $d): ?>
+                    <option value="<?= $d ?>"><?= $d ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">Time</label>
+                  <input type="time" name="slot_time[]" class="form-control">
+                </div>
+                <div>
+                  <label class="form-label" style="visibility:hidden;">X</label>
+                  <button type="button" onclick="removeSlot(this)" class="btn btn-ghost btn-icon"
+                          style="color:var(--danger);visibility:hidden;" title="Remove">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+              </div>
+            <?php endif; ?>
           </div>
 
-          <div class="form-group" style="margin-top:16px;">
-            <label class="form-label">Class Time</label>
-            <input type="time" name="time" class="form-control" style="width:180px;"
-                   value="<?= sanitize($time) ?>">
-          </div>
+          <button type="button" onclick="addSlot()" class="btn btn-ghost btn-sm">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Another Session
+          </button>
+
+          <p class="form-hint" style="margin-top:10px;">
+            Example: Saturday 10:00, Monday 14:00, Wednesday 14:00
+          </p>
         </div>
       </div>
 
@@ -271,24 +328,58 @@ include __DIR__ . '/../../templates/layout.php';
 </form>
 
 <?php
+$dayOpts = json_encode($dayOptions);
 $extraScripts = <<<JS
 <script>
-function toggleDay(cb, day) {
-  const lbl = document.getElementById('lbl_' + day);
-  if (cb.checked) {
-    lbl.style.background = 'var(--accent-subtle)';
-    lbl.style.borderColor = 'rgba(245,166,35,0.4)';
-    lbl.style.color = 'var(--accent)';
-  } else {
-    lbl.style.background = 'var(--bg-elevated)';
-    lbl.style.borderColor = 'var(--border)';
-    lbl.style.color = '';
-  }
+const DAY_OPTIONS = {$dayOpts};
+
+function buildSlotRow(isFirst) {
+    const row = document.createElement('div');
+    row.className = 'schedule-slot';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:10px;';
+
+    const dayOpts = DAY_OPTIONS.map(d => '<option value="' + d + '">' + d + '</option>').join('');
+
+    row.innerHTML =
+        '<div class="form-group" style="margin:0;">' +
+            '<select name="slot_day[]" class="form-control">' +
+                '<option value="">Select day…</option>' +
+                dayOpts +
+            '</select>' +
+        '</div>' +
+        '<div class="form-group" style="margin:0;">' +
+            '<input type="time" name="slot_time[]" class="form-control">' +
+        '</div>' +
+        '<div>' +
+            '<button type="button" onclick="removeSlot(this)" class="btn btn-ghost btn-icon" style="color:var(--danger);" title="Remove">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+            '</button>' +
+        '</div>';
+    return row;
 }
-// Init checked state
-document.querySelectorAll('input[name="days[]"]:checked').forEach(cb => {
-  toggleDay(cb, cb.value);
-});
+
+function addSlot() {
+    const container = document.getElementById('scheduleSlots');
+    container.appendChild(buildSlotRow(false));
+    updateRemoveButtons();
+}
+
+function removeSlot(btn) {
+    const slots = document.querySelectorAll('.schedule-slot');
+    if (slots.length <= 1) return; // keep at least one
+    btn.closest('.schedule-slot').remove();
+    updateRemoveButtons();
+}
+
+function updateRemoveButtons() {
+    const slots = document.querySelectorAll('.schedule-slot');
+    slots.forEach(function(slot, i) {
+        const btn = slot.querySelector('button');
+        if (btn) btn.style.visibility = slots.length <= 1 ? 'hidden' : 'visible';
+    });
+}
+
+updateRemoveButtons();
 </script>
 JS;
 include __DIR__ . '/../../templates/layout_end.php';

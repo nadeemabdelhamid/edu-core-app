@@ -21,8 +21,20 @@ $breadcrumbs = [
     ['label' => $pageTitle],
 ];
 
-// Parse schedule
-$schedule = json_decode($group['schedule'] ?? '{}', true) ?? [];
+// Parse schedule — supports new multi-slot format [{day,time}] and old {days:[],time:''}
+$scheduleRaw = json_decode($group['schedule'] ?? '[]', true) ?? [];
+$scheduleSlots = [];
+if (!empty($scheduleRaw)) {
+    if (isset($scheduleRaw[0]) && is_array($scheduleRaw[0])) {
+        // New format: array of {day, time}
+        $scheduleSlots = $scheduleRaw;
+    } elseif (isset($scheduleRaw['days']) || isset($scheduleRaw['time'])) {
+        // Old format: {days:[], time:''}
+        foreach (($scheduleRaw['days'] ?? []) as $d) {
+            $scheduleSlots[] = ['day' => $d, 'time' => $scheduleRaw['time'] ?? ''];
+        }
+    }
+}
 
 // Enrolled students
 $stuStmt = $pdo->prepare("SELECT s.*, gs.enrolled_at FROM group_students gs JOIN students s ON s.id=gs.student_id WHERE gs.group_id=? AND gs.status='active' ORDER BY s.name");
@@ -137,12 +149,16 @@ include __DIR__ . '/../../templates/layout.php';
       <div class="card-header"><span class="card-title">Group Details</span></div>
       <div class="card-body" style="padding:18px 22px;">
         <div style="display:grid; gap:12px; font-size:0.84rem;">
-          <?php if (!empty($schedule['days'])): ?>
-          <div style="display:flex; justify-content:space-between;">
+          <?php if (!empty($scheduleSlots)): ?>
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
             <span style="color:var(--text-muted);">Schedule</span>
-            <span style="color:var(--text-primary); font-weight:500;">
-              <?= implode(', ', $schedule['days']) ?>
-              <?php if (!empty($schedule['time'])): ?> at <?= $schedule['time'] ?><?php endif; ?>
+            <span style="color:var(--text-primary); font-weight:500; text-align:right;">
+              <?php foreach ($scheduleSlots as $slot): ?>
+              <span style="display:block;">
+                <?= sanitize($slot['day']) ?>
+                <?php if (!empty($slot['time'])): ?> at <?= sanitize($slot['time']) ?><?php endif; ?>
+              </span>
+              <?php endforeach; ?>
             </span>
           </div>
           <?php endif; ?>

@@ -103,10 +103,17 @@ include __DIR__ . '/../../templates/layout.php';
     $colors     = $subjectColors[$subjectKey] ?? $subjectColors['default'];
     $initials   = strtoupper(substr($g['name'], 0, 2));
 
-    // Parse schedule
-    $schedule = [];
-    if ($g['schedule']) {
-        $schedule = json_decode($g['schedule'], true) ?? [];
+    // Parse schedule — supports new multi-slot [{day,time}] and old {days:[],time:''}
+    $schedRaw = $g['schedule'] ? (json_decode($g['schedule'], true) ?? []) : [];
+    $scheduleSlots = [];
+    if (!empty($schedRaw)) {
+        if (isset($schedRaw[0]) && is_array($schedRaw[0])) {
+            $scheduleSlots = $schedRaw;
+        } elseif (isset($schedRaw['days']) || isset($schedRaw['time'])) {
+            foreach (($schedRaw['days'] ?? []) as $d) {
+                $scheduleSlots[] = ['day' => $d, 'time' => $schedRaw['time'] ?? ''];
+            }
+        }
     }
   ?>
   <div class="card group-card" style="position:relative; overflow:hidden; transition:transform 0.2s, border-color 0.2s;"

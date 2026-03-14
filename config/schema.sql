@@ -36,11 +36,12 @@ CREATE TABLE IF NOT EXISTS centers (
     email VARCHAR(255) NOT NULL UNIQUE,
     phone VARCHAR(50),
     address TEXT,
+    branches JSON COMMENT 'Array of branch objects with name/address/phone',
     logo VARCHAR(255),
     timezone VARCHAR(100) DEFAULT 'UTC',
     locale VARCHAR(10) DEFAULT 'en',
     settings JSON,
-    status ENUM('active','suspended','trial') DEFAULT 'trial',
+    status ENUM('active','suspended','trial','pending') DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -100,6 +101,7 @@ CREATE TABLE IF NOT EXISTS students (
     date_of_birth DATE,
     gender ENUM('male','female','other'),
     address TEXT,
+    branches JSON COMMENT 'Array of branch objects with name/address/phone',
     notes TEXT,
     is_active TINYINT(1) DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
