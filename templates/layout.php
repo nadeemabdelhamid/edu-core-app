@@ -98,8 +98,18 @@ $sectionLabels = [
   <title><?= sanitize($pageTitle ?? 'Dashboard') ?> — EduCore</title>
   <link rel="stylesheet" href="/educore/assets/css/app.css">
   <meta name="csrf-token" content="<?= csrf_token() ?>">
+  <script>
+  // Apply dark class IMMEDIATELY — before any paint — to prevent flash
+  (function(){
+    var dark = localStorage.getItem('ec_dark_mode');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (dark === '1' || (dark === null && prefersDark)) {
+      document.documentElement.classList.add('dark');
+    }
+  })();
+</script>
 </head>
-<body>
+<body data-role="<?= $user['role'] ?>">
 
 <div class="app-layout">
 
@@ -107,7 +117,7 @@ $sectionLabels = [
   <aside class="sidebar" id="sidebar">
     <a href="/educore/dashboard.php" class="sidebar-brand">
       <div class="brand-icon">🎓</div>
-      <span class="brand-text">By<span>Nadeem</span></span>
+      <span class="brand-text">Edu<span>Core</span></span>
     </a>
 
     <nav class="sidebar-nav">
@@ -179,21 +189,13 @@ $sectionLabels = [
       </div>
 
       <!-- Centre: search bar -->
+      <!-- Search bar — opens full command palette -->
       <div class="topbar-search-wrap">
-        <div class="topbar-search" onclick="document.getElementById('topbarSearchInput').focus()">
+        <button class="topbar-search topbar-search-btn" onclick="openCommandPalette()" type="button" title="Search (Ctrl+K)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;color:var(--text-muted)"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input type="text" placeholder="Search anything…" id="topbarSearchInput" autocomplete="off"
-                 onfocus="topbarSearchOpen()" oninput="topbarSearchQuery(this.value)">
+          <span class="topbar-search-placeholder">Search anything…</span>
           <kbd class="topbar-search-kbd">⌘K</kbd>
-        </div>
-        <div id="topbarSearchDrop" class="topbar-search-drop" style="display:none;">
-          <div class="tsd-section">Quick links</div>
-          <a class="tsd-item" href="/educore/dashboard.php"><span class="tsd-icon"><?= navIcon('grid') ?></span>Dashboard</a>
-          <a class="tsd-item" href="/educore/modules/students/"><span class="tsd-icon"><?= navIcon('users') ?></span>Students</a>
-          <a class="tsd-item" href="/educore/modules/exams/"><span class="tsd-icon"><?= navIcon('file-text') ?></span>Exams</a>
-          <a class="tsd-item" href="/educore/modules/payments/"><span class="tsd-icon"><?= navIcon('dollar-sign') ?></span>Payments</a>
-          <a class="tsd-item" href="/educore/modules/reports/"><span class="tsd-icon"><?= navIcon('bar-chart-2') ?></span>Reports</a>
-        </div>
+        </button>
       </div>
 
       <!-- Right: actions -->
@@ -237,6 +239,12 @@ $sectionLabels = [
             </div>
           </div>
         </div>
+
+        <!-- Dark mode toggle -->
+        <button class="dark-toggle" id="darkToggle" onclick="toggleDarkMode()" type="button" title="Toggle dark mode" aria-label="Toggle dark mode">
+          <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
 
         <?php if(isRole('owner') && $user['center_id']): ?>
         <a href="/educore/modules/settings/" class="topbar-btn" title="Settings"><?=navIcon('settings')?></a>

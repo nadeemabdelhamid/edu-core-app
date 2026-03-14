@@ -43,6 +43,91 @@
   --glow-accent:   0 0 0 3px rgba(82, 71, 230, 0.15);
 }
 
+/* ─── DARK MODE (html.dark) ──────────────────────────────── */
+html.dark {
+  --bg-base:       #0f1117;
+  --bg-surface:    #1a1d27;
+  --bg-elevated:   #20243300;
+  --bg-elevated:   #222636;
+  --bg-card:       #1e2230;
+  --bg-hover:      #2a2f45;
+  --border:        #2e3350;
+  --border-light:  #3a4060;
+  --accent:        #6c63ff;
+  --accent-dim:    #5247e6;
+  --accent-glow:   rgba(108, 99, 255, 0.20);
+  --accent-subtle: rgba(108, 99, 255, 0.12);
+  --success-dim:   rgba(16, 185, 129, 0.15);
+  --danger-dim:    rgba(239, 68, 68, 0.15);
+  --warning-dim:   rgba(245, 158, 11, 0.15);
+  --info-dim:      rgba(59, 130, 246, 0.15);
+  --text-primary:  #eef0f7;
+  --text-secondary:#8b93b0;
+  --text-muted:    #4e5672;
+  --text-inverse:  #0f1117;
+  --shadow-sm:     0 1px 3px rgba(0,0,0,0.40);
+  --shadow-md:     0 4px 16px rgba(0,0,0,0.50);
+  --shadow-lg:     0 10px 30px rgba(0,0,0,0.60);
+}
+
+/* Dark mode: body/background */
+html.dark { color-scheme: dark; }
+
+/* Dark mode: frosted topbar */
+html.dark .topbar {
+  background: rgba(26, 29, 39, 0.92);
+}
+
+/* Dark mode: scrollbar */
+html.dark ::-webkit-scrollbar-track { background: var(--bg-base); }
+html.dark ::-webkit-scrollbar-thumb { background: var(--border-light); }
+
+/* Dark mode: flash messages */
+html.dark .flash-success { background: #052e16; border-color: rgba(16,185,129,0.3); color: #4ade80; }
+html.dark .flash-error   { background: #450a0a; border-color: rgba(239,68,68,0.3);  color: #f87171; }
+html.dark .flash-warning { background: #422006; border-color: rgba(245,158,11,0.3); color: #fbbf24; }
+html.dark .flash-info    { background: #0c2051; border-color: rgba(59,130,246,0.3); color: #60a5fa; }
+
+/* Dark mode: toast */
+html.dark .ec-toast {
+  background: var(--bg-card);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+html.dark .ec-toast-success .ec-toast-icon { background: rgba(16,185,129,0.15);  color: #34d399; }
+html.dark .ec-toast-error   .ec-toast-icon { background: rgba(239,68,68,0.15);   color: #f87171; }
+html.dark .ec-toast-warning .ec-toast-icon { background: rgba(245,158,11,0.15);  color: #fbbf24; }
+html.dark .ec-toast-info    .ec-toast-icon { background: rgba(59,130,246,0.15);  color: #60a5fa; }
+html.dark .ec-toast-desc { color: var(--text-secondary); }
+
+/* Dark mode: confirm dialog */
+html.dark #ec-confirm-box { background: var(--bg-card); }
+html.dark #ec-confirm-title { color: var(--text-primary); }
+html.dark #ec-confirm-message { color: var(--text-secondary); }
+html.dark #ec-confirm-cancel {
+  background: var(--bg-elevated); border-color: var(--border); color: var(--text-secondary);
+}
+html.dark #ec-confirm-cancel:hover { background: var(--bg-hover); }
+
+/* ─── DARK MODE TOGGLE BUTTON ────────────────────────────── */
+.dark-toggle {
+  width: 38px; height: 38px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-secondary);
+  transition: all 0.15s; position: relative;
+  flex-shrink: 0;
+}
+.dark-toggle:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-light); }
+.dark-toggle .icon-sun,
+.dark-toggle .icon-moon { position: absolute; transition: opacity 0.2s, transform 0.3s; }
+.dark-toggle .icon-sun  { opacity: 1;  transform: rotate(0deg) scale(1); }
+.dark-toggle .icon-moon { opacity: 0;  transform: rotate(-90deg) scale(0.7); }
+html.dark .dark-toggle .icon-sun  { opacity: 0;  transform: rotate(90deg) scale(0.7); }
+html.dark .dark-toggle .icon-moon { opacity: 1;  transform: rotate(0deg) scale(1); }
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 15px; -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
 
@@ -1110,4 +1195,119 @@ body.sidebar-collapsed .topbar-menu-btn:hover {
 
 body.sidebar-collapsed .topbar-menu-btn svg {
   transform: rotate(180deg);
+}
+
+/* ─── MOBILE BOTTOM NAVIGATION ───────────────────────────── */
+#mobileBottomNav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 64px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+  z-index: 200;
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
+}
+
+.mbn-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 8px 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mbn-item:hover,
+.mbn-item:active { color: var(--accent); }
+
+.mbn-active {
+  color: var(--accent) !important;
+}
+
+.mbn-active svg {
+  stroke: var(--accent);
+}
+
+@media (min-width: 769px) {
+  #mobileBottomNav { display: none !important; }
+}
+
+/* ─── DARK MODE TRANSITION ───────────────────────────────── */
+/* Only animate when user explicitly toggles — not on page load.
+   The 'dark-transitioning' class is added/removed by toggleDarkMode(). */
+html.dark-transitioning body,
+html.dark-transitioning .sidebar,
+html.dark-transitioning .topbar,
+html.dark-transitioning .card,
+html.dark-transitioning .stat-card,
+html.dark-transitioning .modal,
+html.dark-transitioning .notif-panel,
+html.dark-transitioning .topbar-user-menu,
+html.dark-transitioning .page-footer,
+html.dark-transitioning .data-table th,
+html.dark-transitioning .data-table td,
+html.dark-transitioning .form-control,
+html.dark-transitioning .btn,
+html.dark-transitioning .badge,
+html.dark-transitioning .topbar-search-wrap {
+  transition: background-color 0.22s ease, border-color 0.22s ease, color 0.18s ease;
+}
+
+/* ─── ONBOARDING ANIMATION ───────────────────────────────── */
+#onboardBox {
+  animation: onboardIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+@keyframes onboardIn {
+  from { transform: translateY(20px) scale(0.95); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* html.dark is set synchronously in <head> — no FOUC rules needed */
+
+/* ─── SEARCH BAR AS BUTTON (opens command palette) ──────── */
+.topbar-search-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 12px;
+  height: 38px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  width: 100%;
+  text-align: left;
+}
+
+.topbar-search-btn:hover {
+  background: var(--bg-surface);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.topbar-search-placeholder {
+  flex: 1;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
