@@ -22,15 +22,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'invite') {
         $email = trim(strtolower($_POST['email'] ?? ''));
-        $role  = $_POST['role'] ?? 'teacher';
-        $allowed = ['teacher','assistant','accountant'];
+        $role  = $_POST['role'] ?? 'assistant';
+
+        // Individual plan: only assistant/accountant allowed — owner IS the only teacher
+        if (isIndividualPlan()) {
+            $allowed = ['assistant','accountant'];
+            if ($role === 'teacher') {
+                $errors[] = 'On the Individual Teacher plan, you are the only teacher. You can add assistants or accountants instead.';
+            }
+        } else {
+            $allowed = ['teacher','assistant','accountant'];
+        }
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Valid email required.';
         if (!in_array($role,$allowed)) $errors[] = 'Invalid role.';
 
-        // Check teacher limit
-        $limit = checkLimit('teachers');
-        if (!$limit['ok']) $errors[] = "Teacher limit reached ({$limit['used']}/{$limit['max']}) on {$limit['plan']} plan. Upgrade to add more.";
+        // Check teacher limit (only applies on Academy plan)
+        if (!isIndividualPlan()) {
+            $limit = checkLimit('teachers');
+            if (!$limit['ok']) $errors[] = "Teacher limit reached ({$limit['used']}/{$limit['max']}) on {$limit['plan']} plan. Upgrade to add more.";
+        }
 
         if (!$errors) {
             // Check if already a user or pending invite
@@ -62,7 +73,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'change_role') {
         $uid     = (int)$_POST['user_id'];
         $newRole = $_POST['new_role'] ?? '';
-        if (in_array($newRole,['teacher','assistant','accountant'])) {
+        // On Individual plan, can't assign teacher role (owner is the only teacher)
+        $allowedRoles = isIndividualPlan() ? ['assistant','accountant'] : ['teacher','assistant','accountant'];
+        if (in_array($newRole, $allowedRoles)) {
             $pdo->prepare("UPDATE users SET role=? WHERE id=? AND center_id=? AND role!='owner'")->execute([$newRole,$uid,$cid]);
             flash('success','Role updated.');
         }
@@ -161,7 +174,10 @@ include __DIR__ . '/../../templates/layout.php';
             <form method="POST" style="display:inline;">
               <?=csrf_field()?><input type="hidden" name="action" value="change_role"><input type="hidden" name="user_id" value="<?=$s['id']?>">
               <select name="new_role" class="form-control" style="padding:4px 28px 4px 8px;font-size:0.76rem;width:auto;height:auto;" onchange="this.form.submit()">
-                <?php foreach(['teacher','assistant','accountant'] as $r): ?>
+                <?php
+                // Individual plan: can't promote to teacher role (owner is the only teacher)
+                $changeableRoles = isIndividualPlan() ? ['assistant','accountant'] : ['teacher','assistant','accountant'];
+                foreach($changeableRoles as $r): ?>
                 <option value="<?=$r?>" <?=$s['role']===$r?'selected':''?>><?=ucfirst($r)?></option>
                 <?php endforeach; ?>
               </select>
@@ -217,24 +233,36 @@ include __DIR__ . '/../../templates/layout.php';
 
 <!-- Invite form sidebar -->
 <div>
-  <?php if (isIndividualPlan()): ?>
-  <div class="card">
-    <div class="card-body" style="padding:20px;">
-      <div style="font-size:1.5rem;margin-bottom:10px;">👤</div>
-      <div style="font-weight:700;margin-bottom:6px;">Individual Teacher Plan</div>
-      <p style="font-size:0.82rem;color:var(--text-muted);line-height:1.7;margin-bottom:14px;">
-        Your plan is designed for a single teacher. <strong>You are the teacher</strong> — you have full control over all students, groups, exams, and videos.
-      </p>
-      <p style="font-size:0.82rem;color:var(--text-muted);line-height:1.7;margin-bottom:16px;">
-        To add multiple teachers and manage them, upgrade to the <strong>Academy plan</strong>.
-      </p>
-      <a href="subscription.php" class="btn btn-primary w-full">View Plans →</a>
-    </div>
-  </div>
-  <?php else: ?>
   <div class="card">
     <div class="card-header"><span class="card-title">Invite Staff Member</span></div>
     <div class="card-body">
+
+      <?php if (isIndividualPlan()): ?>
+      <!-- Individual plan: assistants and accountants allowed; teachers not -->
+      <div style="background:rgba(82,71,230,0.06);border:1px solid rgba(82,71,230,0.18);border-radius:var(--radius-sm);padding:11px 14px;font-size:0.79rem;color:var(--text-secondary);margin-bottom:16px;line-height:1.6;">
+        <strong style="color:var(--text-primary);">👤 Individual Teacher Plan</strong><br>
+        You are the only teacher. You can invite <strong>assistants</strong> or <strong>accountants</strong> to help you.
+        <a href="subscription.php" style="color:var(--accent);font-weight:600;display:block;margin-top:6px;">Upgrade to Academy to add more teachers →</a>
+      </div>
+      <form method="POST">
+        <?=csrf_field()?><input type="hidden" name="action" value="invite">
+        <div class="form-group">
+          <label class="form-label required">Email Address</label>
+          <input type="email" name="email" class="form-control" placeholder="assistant@example.com" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role</label>
+          <select name="role" class="form-control">
+            <option value="assistant">Assistant</option>
+            <option value="accountant">Accountant</option>
+          </select>
+          <span class="form-hint">Teachers not available on Individual plan.</span>
+        </div>
+        <button type="submit" class="btn btn-primary w-full">Send Invitation →</button>
+      </form>
+
+      <?php else: ?>
+      <!-- Academy plan: all roles available -->
       <?php if(!$limit['ok']): ?>
       <div style="background:var(--danger-dim);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:12px 14px;font-size:0.8rem;color:var(--danger);margin-bottom:14px;">
         Teacher limit reached (<?=$limit['used']?>/<?=$limit['max']?>). <a href="subscription.php" style="color:var(--danger);font-weight:700;">Upgrade →</a>
@@ -256,12 +284,13 @@ include __DIR__ . '/../../templates/layout.php';
         </div>
         <button type="submit" class="btn btn-primary w-full" <?=!$limit['ok']?'disabled':''?>>Send Invitation →</button>
       </form>
+      <?php endif; ?>
+
       <div style="margin-top:14px;font-size:0.76rem;color:var(--text-muted);line-height:1.6;">
         The invited person will receive a link to create their account and join your center.
       </div>
     </div>
   </div>
-  <?php endif; ?>
 </div>
 </div>
 

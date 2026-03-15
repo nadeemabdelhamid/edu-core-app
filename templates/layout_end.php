@@ -53,11 +53,11 @@
     <!-- Text -->
     <div style="padding:16px 28px 8px; text-align:center;">
       <div id="ec-confirm-title" style="
-        font-family:'DM Sans',sans-serif; font-size:1.05rem; font-weight:700;
+        font-family:'Nunito',sans-serif; font-size:1.05rem; font-weight:700;
         color:#0f172a; letter-spacing:-0.02em; margin-bottom:6px;
       "></div>
       <div id="ec-confirm-message" style="
-        font-family:'DM Sans',sans-serif; font-size:0.875rem;
+        font-family:'Nunito',sans-serif; font-size:0.875rem;
         color:#64748b; line-height:1.6;
       "></div>
     </div>
@@ -69,7 +69,7 @@
       <button id="ec-confirm-cancel" onclick="ecConfirmResolve(false)" style="
         flex:1; padding:10px 20px;
         background:#f1f5f9; border:1px solid #e2e8f0; border-radius:8px;
-        font-family:'DM Sans',sans-serif; font-size:0.875rem; font-weight:600;
+        font-family:'Nunito',sans-serif; font-size:0.875rem; font-weight:600;
         color:#475569; cursor:pointer; transition:all 0.15s;
       " onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
         Cancel
@@ -77,7 +77,7 @@
       <button id="ec-confirm-ok" onclick="ecConfirmResolve(true)" style="
         flex:1; padding:10px 20px;
         border:none; border-radius:8px;
-        font-family:'DM Sans',sans-serif; font-size:0.875rem; font-weight:700;
+        font-family:'Nunito',sans-serif; font-size:0.875rem; font-weight:700;
         cursor:pointer; transition:all 0.15s; color:#fff;
       ">
         Confirm
@@ -114,7 +114,7 @@
   background: #fff;
   border: 1px solid #e2e8f0;
   box-shadow: 0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Nunito', sans-serif;
   font-size: 0.875rem;
   font-weight: 500;
   color: #0f172a;
