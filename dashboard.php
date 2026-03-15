@@ -22,51 +22,88 @@ $cid = centerId();
 $stats = [];
 
 if ($cid) {
-    // Total students
-    $s = $pdo->prepare("SELECT COUNT(*) FROM students WHERE center_id = ? AND is_active = 1");
-    $s->execute([$cid]);
+    $uid = authId();
+    $isAcademyTeacher = (isRole('teacher') && isAcademyPlan());
+
+    // Total students — scoped for academy teachers
+    if ($isAcademyTeacher) {
+        $s = $pdo->prepare("SELECT COUNT(*) FROM student_teachers WHERE teacher_id=? AND center_id=?");
+        $s->execute([$uid, $cid]);
+    } else {
+        $s = $pdo->prepare("SELECT COUNT(*) FROM students WHERE center_id = ? AND is_active = 1");
+        $s->execute([$cid]);
+    }
     $stats['students'] = $s->fetchColumn();
 
-    // Total groups
-    $s = $pdo->prepare("SELECT COUNT(*) FROM `groups` WHERE center_id = ? AND is_active = 1");
-    $s->execute([$cid]);
+    // Total groups — scoped for academy teachers
+    if ($isAcademyTeacher) {
+        $s = $pdo->prepare("SELECT COUNT(*) FROM `groups` WHERE center_id=? AND teacher_id=? AND is_active=1");
+        $s->execute([$cid, $uid]);
+    } else {
+        $s = $pdo->prepare("SELECT COUNT(*) FROM `groups` WHERE center_id = ? AND is_active = 1");
+        $s->execute([$cid]);
+    }
     $stats['groups'] = $s->fetchColumn();
 
-    // Attendance sessions this month
-    $s = $pdo->prepare("SELECT COUNT(*) FROM attendance_sessions WHERE center_id = ? AND MONTH(session_date)=MONTH(NOW()) AND YEAR(session_date)=YEAR(NOW())");
-    $s->execute([$cid]);
+    // Attendance sessions this month — scoped for academy teachers
+    if ($isAcademyTeacher) {
+        $s = $pdo->prepare("SELECT COUNT(*) FROM attendance_sessions WHERE center_id=? AND teacher_id=? AND MONTH(session_date)=MONTH(NOW()) AND YEAR(session_date)=YEAR(NOW())");
+        $s->execute([$cid, $uid]);
+    } else {
+        $s = $pdo->prepare("SELECT COUNT(*) FROM attendance_sessions WHERE center_id = ? AND MONTH(session_date)=MONTH(NOW()) AND YEAR(session_date)=YEAR(NOW())");
+        $s->execute([$cid]);
+    }
     $stats['sessions'] = $s->fetchColumn();
 
-    // Monthly income
-    $s = $pdo->prepare("SELECT COALESCE(SUM(paid_amount),0) FROM payments WHERE center_id = ? AND MONTH(paid_date)=MONTH(NOW()) AND status IN('paid','partial')");
-    $s->execute([$cid]);
-    $stats['income'] = $s->fetchColumn();
+    // Monthly income — owner only on academy plan
+    if (!$isAcademyTeacher) {
+        $s = $pdo->prepare("SELECT COALESCE(SUM(paid_amount),0) FROM payments WHERE center_id = ? AND MONTH(paid_date)=MONTH(NOW()) AND status IN('paid','partial')");
+        $s->execute([$cid]);
+        $stats['income'] = $s->fetchColumn();
+        $s = $pdo->prepare("SELECT COUNT(*) FROM payments WHERE center_id = ? AND status IN('unpaid','overdue')");
+        $s->execute([$cid]);
+        $stats['unpaid'] = $s->fetchColumn();
+    }
 
-    // Unpaid count
-    $s = $pdo->prepare("SELECT COUNT(*) FROM payments WHERE center_id = ? AND status IN('unpaid','overdue')");
-    $s->execute([$cid]);
-    $stats['unpaid'] = $s->fetchColumn();
-
-    // Recent students
-    $s = $pdo->prepare("SELECT * FROM students WHERE center_id = ? ORDER BY created_at DESC LIMIT 6");
-    $s->execute([$cid]);
+    // Recent students — scoped for academy teachers
+    if ($isAcademyTeacher) {
+        $s = $pdo->prepare("SELECT s.* FROM students s INNER JOIN student_teachers st ON st.student_id=s.id WHERE st.teacher_id=? AND st.center_id=? ORDER BY st.assigned_at DESC LIMIT 6");
+        $s->execute([$uid, $cid]);
+    } else {
+        $s = $pdo->prepare("SELECT * FROM students WHERE center_id = ? ORDER BY created_at DESC LIMIT 6");
+        $s->execute([$cid]);
+    }
     $recentStudents = $s->fetchAll();
 
-    // Recent payments
-    $s = $pdo->prepare("SELECT p.*, s.name as student_name FROM payments p
-                         JOIN students s ON s.id = p.student_id
-                         WHERE p.center_id = ? ORDER BY p.created_at DESC LIMIT 5");
-    $s->execute([$cid]);
-    $recentPayments = $s->fetchAll();
+    // Recent payments — owner only
+    if (!$isAcademyTeacher) {
+        $s = $pdo->prepare("SELECT p.*, s.name as student_name FROM payments p
+                             JOIN students s ON s.id = p.student_id
+                             WHERE p.center_id = ? ORDER BY p.created_at DESC LIMIT 5");
+        $s->execute([$cid]);
+        $recentPayments = $s->fetchAll();
+    } else {
+        $recentPayments = [];
+    }
 
-    // Attendance sessions this week
-    $s = $pdo->prepare("SELECT a.*, g.name as group_name, u.name as teacher_name
-                         FROM attendance_sessions a
-                         JOIN `groups` g ON g.id = a.group_id
-                         JOIN users u ON u.id = a.teacher_id
-                         WHERE a.center_id = ? AND a.session_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-                         ORDER BY a.created_at DESC LIMIT 5");
-    $s->execute([$cid]);
+    // Attendance sessions this week — scoped for academy teachers
+    if ($isAcademyTeacher) {
+        $s = $pdo->prepare("SELECT a.*, g.name as group_name, u.name as teacher_name
+                             FROM attendance_sessions a
+                             JOIN `groups` g ON g.id = a.group_id
+                             JOIN users u ON u.id = a.teacher_id
+                             WHERE a.center_id=? AND a.teacher_id=? AND a.session_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                             ORDER BY a.created_at DESC LIMIT 5");
+        $s->execute([$cid, $uid]);
+    } else {
+        $s = $pdo->prepare("SELECT a.*, g.name as group_name, u.name as teacher_name
+                             FROM attendance_sessions a
+                             JOIN `groups` g ON g.id = a.group_id
+                             JOIN users u ON u.id = a.teacher_id
+                             WHERE a.center_id = ? AND a.session_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                             ORDER BY a.created_at DESC LIMIT 5");
+        $s->execute([$cid]);
+    }
     $recentSessions = $s->fetchAll();
 }
 
@@ -118,6 +155,7 @@ include __DIR__ . '/templates/layout.php';
     <span class="stat-change up">↑ This month</span>
   </div>
 
+  <?php if (!(isRole('teacher') && isAcademyPlan())): ?>
   <div class="stat-card" style="--stat-color: #22c55e; --stat-bg: rgba(34,197,94,0.1)">
     <div class="stat-icon">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -130,6 +168,7 @@ include __DIR__ . '/templates/layout.php';
     <span class="stat-change up">↑ All collected</span>
     <?php endif; ?>
   </div>
+  <?php endif; ?>
 </div>
 
 <!-- BOTTOM GRID -->
@@ -179,7 +218,8 @@ include __DIR__ . '/templates/layout.php';
     </div>
   </div>
 
-  <!-- Recent Payments -->
+  <!-- Recent Payments (owner-only on academy plan) -->
+  <?php if (!(isRole('teacher') && isAcademyPlan())): ?>
   <div class="card">
     <div class="card-header">
       <span class="card-title">Recent Payments</span>
@@ -220,6 +260,7 @@ include __DIR__ . '/templates/layout.php';
       <?php endif; ?>
     </div>
   </div>
+  <?php endif; // end academy teacher payments check ?>
 </div>
 
 <!-- Recent Students -->

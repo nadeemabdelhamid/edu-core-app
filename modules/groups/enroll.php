@@ -9,11 +9,17 @@ $isNew  = isset($_GET['new']);
 
 if (!$gid) redirect('/educore/modules/groups/');
 
-// Verify group belongs to center
+// Verify group belongs to center (and to teacher if on academy plan)
 $gStmt = $pdo->prepare("SELECT * FROM `groups` WHERE id = ? AND center_id = ?");
 $gStmt->execute([$gid, $cid]);
 $group = $gStmt->fetch();
 if (!$group) { flash('error', 'Group not found.'); redirect('/educore/modules/groups/'); }
+
+// Academy plan teachers can only manage their own groups
+if (isRole('teacher') && isAcademyPlan() && $group['teacher_id'] != authId()) {
+    flash('error', 'You can only enroll students into your own groups.');
+    redirect('/educore/modules/groups/');
+}
 
 $pageTitle  = 'Enroll Students — ' . $group['name'];
 $activePage = 'groups';
@@ -76,9 +82,11 @@ $enrolledStmt->execute([$gid]);
 $enrolled = $enrolledStmt->fetchAll();
 $enrolledIds = array_column($enrolled, 'id');
 
-// All students NOT in this group
+// All students NOT in this group — scoped to teacher's students on academy plan
 $search = trim($_GET['q'] ?? '');
-$availWhere = "WHERE s.center_id = ? AND s.is_active = 1";
+[$stJoin, $stWhere, $stParams] = studentTeacherScopeSQL('s');
+
+$availWhere  = "WHERE s.center_id = ? AND s.is_active = 1";
 $availParams = [$cid];
 
 if ($enrolledIds) {
@@ -90,9 +98,10 @@ if ($search) {
     $availWhere  .= " AND (s.name LIKE ? OR s.phone LIKE ?)";
     $availParams  = array_merge($availParams, ["%$search%", "%$search%"]);
 }
+$availWhere  .= $stWhere;
 
-$availStmt = $pdo->prepare("SELECT * FROM students s $availWhere ORDER BY s.name LIMIT 50");
-$availStmt->execute($availParams);
+$availStmt = $pdo->prepare("SELECT * FROM students s {$stJoin} {$availWhere} ORDER BY s.name LIMIT 50");
+$availStmt->execute(array_merge($stParams, $availParams));
 $available = $availStmt->fetchAll();
 
 // Capacity info

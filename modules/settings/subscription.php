@@ -15,16 +15,17 @@ $breadcrumbs = [
 
 // Current subscription
 $subStmt = $pdo->prepare("
-    SELECT s.*, p.name AS plan_name, p.slug AS plan_slug, p.price, p.billing_cycle,
-           p.max_students, p.max_teachers, p.max_groups, p.features
+    SELECT s.*, p.name AS plan_name, p.slug AS plan_slug, p.plan_type,
+           p.price, p.billing_cycle, p.max_students, p.max_teachers, p.max_groups, p.features
     FROM subscriptions s JOIN plans p ON p.id=s.plan_id
     WHERE s.center_id=? ORDER BY s.id DESC LIMIT 1");
 $subStmt->execute([$cid]);
 $sub = $subStmt->fetch();
-$features = json_decode($sub['features'] ?? '{}', true) ?? [];
+$features    = json_decode($sub['features'] ?? '{}', true) ?? [];
+$currentType = $sub['plan_type'] ?? 'academy';
 
-// All plans
-$plansStmt = $pdo->prepare("SELECT * FROM plans WHERE is_active=1 ORDER BY price ASC");
+// All plans — separate into types for display
+$plansStmt = $pdo->prepare("SELECT * FROM plans WHERE is_active=1 ORDER BY FIELD(plan_type,'individual','academy'), price ASC");
 $plansStmt->execute();
 $plans = $plansStmt->fetchAll();
 
@@ -91,8 +92,34 @@ include __DIR__ . '/../../templates/layout.php';
 
 <div class="page-header">
   <div><h1 class="page-title">Subscription</h1><p class="page-subtitle">Manage your plan and usage</p></div>
-  <a href="/" class="btn btn-ghost btn-sm" style="display:none">Billing Portal</a>
 </div>
+
+<?php if ($sub): ?>
+<!-- Plan type banner -->
+<div style="background:<?=$currentType==='individual'?'rgba(139,92,246,0.06)':'rgba(59,130,246,0.06)'?>;border:1px solid <?=$currentType==='individual'?'rgba(139,92,246,0.2)':'rgba(59,130,246,0.2)'?>;border-radius:var(--radius-md);padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+  <div style="font-size:2rem;"><?=$currentType==='individual'?'👤':'🏫'?></div>
+  <div style="flex:1;min-width:0;">
+    <div style="font-weight:700;font-size:0.95rem;margin-bottom:3px;">
+      <?=$currentType==='individual'?'Individual Teacher Plan':'Academy Plan'?>
+      <span style="font-size:0.72rem;padding:2px 8px;border-radius:8px;background:<?=$currentType==='individual'?'rgba(139,92,246,0.12)':'rgba(59,130,246,0.12)'?>;color:<?=$currentType==='individual'?'#8b5cf6':'#3b82f6'?>;font-weight:600;margin-left:6px;"><?=ucfirst($sub['status']??'')?></span>
+    </div>
+    <div style="font-size:0.82rem;color:var(--text-muted);">
+      <?php if($currentType==='individual'): ?>
+        You are the sole teacher — full control over all students, groups, exams, videos and attendance.
+      <?php else: ?>
+        Multi-teacher academy — you have full oversight of all teachers, students, groups, and finances.
+        Teachers only see their own students and groups.
+      <?php endif; ?>
+    </div>
+  </div>
+  <?php if($sub['expires_at']): ?>
+  <div style="text-align:right;font-size:0.8rem;color:var(--text-muted);">
+    <div style="font-weight:600;color:var(--text-primary);">Expires</div>
+    <?=date('M j, Y',strtotime($sub['expires_at']))?>
+  </div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <!-- Settings sub-nav -->
 <div style="display:flex;gap:4px;margin-bottom:24px;border-bottom:1px solid var(--border);">

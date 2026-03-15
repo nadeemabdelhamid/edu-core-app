@@ -63,8 +63,14 @@ $statsStmt = $pdo->prepare("SELECT
 $statsStmt->execute([$cid]);
 $stats = $statsStmt->fetch();
 
-$gStmt = $pdo->prepare("SELECT id,name FROM `groups` WHERE center_id=? AND is_active=1 ORDER BY name");
-$gStmt->execute([$cid]);
+// Scope group dropdown for academy teachers
+if (isRole('teacher') && isAcademyPlan()) {
+    $gStmt = $pdo->prepare("SELECT id,name FROM `groups` WHERE center_id=? AND teacher_id=? AND is_active=1 ORDER BY name");
+    $gStmt->execute([$cid, $uid]);
+} else {
+    $gStmt = $pdo->prepare("SELECT id,name FROM `groups` WHERE center_id=? AND is_active=1 ORDER BY name");
+    $gStmt->execute([$cid]);
+}
 $groups = $gStmt->fetchAll();
 
 // Handle quick delete from index

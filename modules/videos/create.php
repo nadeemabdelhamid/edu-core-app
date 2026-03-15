@@ -63,12 +63,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         [$provider, $videoId] = $parsed;
         $thumb = videoThumbnailUrl($provider, $videoId);
 
+        // Academy plan: teacher owns the video; owner upload = global
+        $ownerTeacherId = (isRole('teacher') && isAcademyPlan()) ? $uid : null;
+        $isGlobal       = (isRole('owner') && isAcademyPlan()) ? 1 : 0;
+
         $pdo->prepare("INSERT INTO videos
             (center_id, group_id, title, description, video_provider, video_id,
-             duration_min, thumbnail_url, is_visible, available_from, available_until, created_by)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+             duration_min, thumbnail_url, is_visible, available_from, available_until,
+             created_by, owner_teacher_id, is_global)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
             ->execute([$cid, $groupId, $title, $description, $provider, $videoId,
-                       $durationMin, $thumb, $isVisible, $availFrom, $availUntil, $uid]);
+                       $durationMin, $thumb, $isVisible, $availFrom, $availUntil,
+                       $uid, $ownerTeacherId, $isGlobal]);
 
         $newId = $pdo->lastInsertId();
         auditLog('video.created', 'video', $newId, ['title' => $title, 'provider' => $provider]);

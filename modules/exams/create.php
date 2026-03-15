@@ -14,8 +14,14 @@ $breadcrumbs = [
     ['label'=>'Create Exam'],
 ];
 
-$gStmt = $pdo->prepare("SELECT id,name,subject FROM `groups` WHERE center_id=? AND is_active=1 ORDER BY name");
-$gStmt->execute([$cid]);
+// Scope group dropdown for academy teachers
+if (isRole('teacher') && isAcademyPlan()) {
+    $gStmt = $pdo->prepare("SELECT id,name,subject FROM `groups` WHERE center_id=? AND teacher_id=? AND is_active=1 ORDER BY name");
+    $gStmt->execute([$cid, authId()]);
+} else {
+    $gStmt = $pdo->prepare("SELECT id,name,subject FROM `groups` WHERE center_id=? AND is_active=1 ORDER BY name");
+    $gStmt->execute([$cid]);
+}
 $groups = $gStmt->fetchAll();
 
 $errors = [];

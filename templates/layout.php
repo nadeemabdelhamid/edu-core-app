@@ -83,7 +83,7 @@ if ($user['role'] === 'student') {
         'academic' => [
             ['href' => '/educore/modules/exams/',         'icon' => 'file-text',    'label' => 'Exams',      'key' => 'exams'],
             ['href' => '/educore/modules/videos/',        'icon' => 'play-circle',  'label' => 'Videos',     'key' => 'videos', 'feature' => 'videos'],
-            ['href' => '/educore/modules/payments/',      'icon' => 'dollar-sign',  'label' => 'Payments',   'key' => 'payments'],
+            ['href' => '/educore/modules/payments/',      'icon' => 'dollar-sign',  'label' => 'Payments',   'key' => 'payments', 'owner_only_academy' => true],
             ['href' => '/educore/modules/reports/',       'icon' => 'bar-chart-2',  'label' => 'Reports',    'key' => 'reports'],
         ],
         'settings' => [
@@ -167,6 +167,8 @@ $sectionLabels = [
             }
           ?>
           <?php
+            // Hide payments from academy teachers
+            if (!empty($item['owner_only_academy']) && isRole('teacher') && isAcademyPlan()) continue;
             // Determine active state — also match view-based URLs for super admin
             $isActive = ($activePage ?? '') === $item['key'];
             if (!$isActive && isset($item['href'])) {

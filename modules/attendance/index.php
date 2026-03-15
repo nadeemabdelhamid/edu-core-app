@@ -22,7 +22,8 @@ $to     = $_GET['to'] ?? '';
 $where  = "WHERE s.center_id = ?";
 $params = [$cid];
 
-if (!isRole('owner')) {
+// Academy plan: scope teachers to their sessions; individual plan owner sees all
+if (isRole('teacher') && isAcademyPlan()) {
     $where  .= " AND s.teacher_id = ?";
     $params[] = $uid;
 }
@@ -48,7 +49,7 @@ $sessions = $result['data'];
 // ── Overview stats ───────────────────────────────────────────
 $statParams = [$cid];
 $statWhere  = "WHERE s.center_id=?";
-if (!isRole('owner')) { $statWhere .= " AND s.teacher_id=?"; $statParams[] = $uid; }
+if (isRole('teacher') && isAcademyPlan()) { $statWhere .= " AND s.teacher_id=?"; $statParams[] = $uid; }
 
 $statsStmt = $pdo->prepare("
     SELECT
@@ -81,8 +82,14 @@ $rateStmt->execute([$cid]);
 $avgRate = $rateStmt->fetchColumn() ?? 0;
 
 // ── Groups dropdown ──────────────────────────────────────────
-$gStmt = $pdo->prepare("SELECT id, name FROM `groups` WHERE center_id=? AND is_active=1 ORDER BY name");
-$gStmt->execute([$cid]);
+// Groups dropdown: academy teachers only see their own groups
+if (isRole('teacher') && isAcademyPlan()) {
+    $gStmt = $pdo->prepare("SELECT id, name FROM `groups` WHERE center_id=? AND teacher_id=? AND is_active=1 ORDER BY name");
+    $gStmt->execute([$cid, $uid]);
+} else {
+    $gStmt = $pdo->prepare("SELECT id, name FROM `groups` WHERE center_id=? AND is_active=1 ORDER BY name");
+    $gStmt->execute([$cid]);
+}
 $groups = $gStmt->fetchAll();
 
 include __DIR__ . '/../../templates/layout.php';

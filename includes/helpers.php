@@ -91,6 +91,81 @@ function tenantScope($query, $alias = '') {
     return $query . " AND $col = " . (int)centerId();
 }
 
+// ─── PLAN TYPE HELPERS ────────────────────────────────────────
+/**
+ * Returns 'individual' or 'academy' for the current center's active plan.
+ * Individual plan = 1 teacher (the owner), no multi-teacher scoping.
+ * Academy plan    = multi-teacher with full owner oversight.
+ */
+function getPlanType(): string {
+    if (isRole('super_admin')) return 'academy';
+    $cid = centerId();
+    if (!$cid) return 'individual';
+    static $cache = [];
+    if (isset($cache[$cid])) return $cache[$cid];
+    try {
+        $pdo  = getDB();
+        $stmt = $pdo->prepare("
+            SELECT p.plan_type FROM subscriptions s
+            JOIN plans p ON p.id = s.plan_id
+            WHERE s.center_id = ? AND s.status IN ('active','trial')
+            AND (s.expires_at IS NULL OR s.expires_at > NOW())
+            ORDER BY s.id DESC LIMIT 1");
+        $stmt->execute([$cid]);
+        $row  = $stmt->fetch();
+        $type = ($row && isset($row['plan_type'])) ? $row['plan_type'] : 'individual';
+        $cache[$cid] = $type;
+        return $type;
+    } catch (Exception $e) { return 'individual'; }
+}
+
+function isAcademyPlan(): bool { return getPlanType() === 'academy'; }
+function isIndividualPlan(): bool { return getPlanType() === 'individual'; }
+
+/**
+ * True when current user is the owner on an Academy plan.
+ * Use to show owner-only UI (assign students, see all payments, etc.)
+ */
+function isAcademyOwner(): bool {
+    return isRole('owner') && isAcademyPlan();
+}
+
+// ─── TEACHER SCOPE ────────────────────────────────────────────
+/**
+ * Returns the teacher_id filter for queries when the current user is a teacher
+ * on an Academy plan. Owner always sees everything.
+ * Returns null if no filter is needed (owner / individual plan).
+ */
+function teacherScopeId(): ?int {
+    if (isRole('owner', 'super_admin', 'assistant', 'accountant')) return null;
+    if (isRole('teacher') && isAcademyPlan()) return authId();
+    return null; // individual plan teacher = they are the owner
+}
+
+/**
+ * Apply teacher scope WHERE clause to a query.
+ * $col should be the column that holds the teacher/owner id (e.g. 'g.teacher_id')
+ * Returns ['where_clause', 'params_to_add']
+ */
+function teacherScopeWhere(string $col): array {
+    $tid = teacherScopeId();
+    if ($tid === null) return ['', []];
+    return [" AND $col = ?", [$tid]];
+}
+
+/**
+ * For students: teacher scope works through student_teachers join.
+ * Returns extra JOIN + WHERE clause fragment.
+ */
+function studentTeacherScopeSQL(string $studentAlias = 's'): array {
+    $tid = teacherScopeId();
+    if ($tid === null) return ['', '', []];
+    $join  = " INNER JOIN student_teachers _st ON _st.student_id = {$studentAlias}.id AND _st.teacher_id = ?";
+    $where = " AND _st.center_id = ?";
+    return [$join, $where, [$tid, centerId()]];
+}
+
+
 // ─── FLASH MESSAGES ──────────────────────────────────────────
 function flash($type, $message) {
     $_SESSION['flash'][] = ['type' => $type, 'message' => $message];

@@ -14,8 +14,13 @@ $search  = trim($_GET['q'] ?? '');
 $status  = $_GET['status'] ?? '';
 $page    = max(1, (int)($_GET['page'] ?? 1));
 
+// ── Teacher scope (Academy plan: teachers only see their own students) ──
+[$stJoin, $stWhere, $stParams] = studentTeacherScopeSQL('s');
+
 $where  = "WHERE s.center_id = ?";
 $params = [$cid];
+// Add teacher scope join params before other params
+$joinParams = $stParams;
 
 if ($search) {
     $where .= " AND (s.name LIKE ? OR s.email LIKE ? OR s.phone LIKE ? OR s.student_code LIKE ?)";
@@ -34,8 +39,10 @@ $loginFilter = $_GET['login'] ?? '';
 $query = "SELECT s.*, u.id AS uid, u.email AS login_email, u.is_active AS login_active,
                   (SELECT COUNT(*) FROM group_students gs WHERE gs.student_id = s.id AND gs.status='active') AS group_count
            FROM students s
+           {$stJoin}
            LEFT JOIN users u ON u.id = s.user_id
-           $where ORDER BY s.created_at DESC";
+           {$where}{$stWhere} ORDER BY s.created_at DESC";
+$params = array_merge($joinParams, $params);
 $result = paginate($query, $params, $page, 20);
 $students = $result['data'];
 
@@ -48,6 +55,12 @@ include __DIR__ . '/../../templates/layout.php';
     <p class="page-subtitle"><?= number_format($result['total']) ?> total students enrolled</p>
   </div>
   <div style="display:flex; gap:10px; align-items:center;">
+    <?php if (isRole('owner') && isAcademyPlan()): ?>
+    <a href="assign_teachers.php" class="btn btn-ghost">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/><line x1="20" y1="8" x2="20" y2="14"/></svg>
+      Assign to Teachers
+    </a>
+    <?php endif; ?>
     <a href="import.php" class="btn btn-ghost">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       Import CSV

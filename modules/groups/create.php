@@ -74,7 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'name'                     => trim($_POST['name'] ?? ''),
         'subject'                  => trim($_POST['subject'] ?? ''),
         'description'              => trim($_POST['description'] ?? ''),
-        'teacher_id'               => (int)($_POST['teacher_id'] ?? 0) ?: null,
+        // Academy plan: teachers always own their groups; owner can assign any teacher
+        'teacher_id'               => (isRole('teacher') && isAcademyPlan()) ? authId() : ((int)($_POST['teacher_id'] ?? 0) ?: null),
         'capacity'                 => max(1, (int)($_POST['capacity'] ?? 30)),
         'monthly_fee'              => (float)($_POST['monthly_fee'] ?? 0),
         'start_date'               => $_POST['start_date'] ?? null,

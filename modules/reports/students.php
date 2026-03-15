@@ -39,8 +39,11 @@ $grpEnrollStmt->execute([$cid]); $groupEnroll = $grpEnrollStmt->fetchAll();
 $allowedSort = ['name','att_rate','total_paid','created_at'];
 $sortCol     = in_array($sortBy, $allowedSort) ? $sortBy : 'name';
 
+// Academy teachers only see their own students
+[$stJoin, $stWhere, $stParams] = studentTeacherScopeSQL('s');
 $where  = 'WHERE s.center_id = ?';
-$params = [$cid];
+$params = array_merge($stParams, [$cid]);
+$where .= $stWhere; // academy teacher scope
 if ($search) { $where .= ' AND (s.name LIKE ? OR s.student_code LIKE ? OR s.phone LIKE ?)'; $like="%$search%"; $params=array_merge($params,[$like,$like,$like]); }
 
 $sortMap = [
@@ -60,7 +63,7 @@ $query = "SELECT s.id, s.name, s.student_code, s.phone, s.email, s.is_active, s.
                   AND asess.session_date >= DATE_SUB(NOW(),INTERVAL 90 DAY)) AS att_rate,
                  (SELECT COALESCE(SUM(paid_amount),0) FROM payments WHERE student_id=s.id AND center_id=s.center_id) AS total_paid,
                  (SELECT COALESCE(SUM(amount-COALESCE(discount,0)-paid_amount),0) FROM payments WHERE student_id=s.id AND center_id=s.center_id AND status IN('unpaid','partial','overdue')) AS outstanding
-          FROM students s $where ORDER BY $orderClause";
+          FROM students s {$stJoin} $where ORDER BY $orderClause";
 
 $result   = paginate($query, $params, $page, 30);
 $students = $result['data'];

@@ -23,7 +23,18 @@ $page   = max(1, (int)($_GET['page'] ?? 1));
 
 $where  = "WHERE v.center_id = ?";
 $params = [$cid];
-if (!isRole('owner', 'assistant')) { $where .= " AND v.created_by = ?"; $params[] = $uid; }
+
+// Academy plan: teacher sees their own videos OR global (owner-uploaded) videos
+// Individual plan: owner sees all, no restriction
+if (isRole('teacher') && isAcademyPlan()) {
+    $where  .= " AND (v.owner_teacher_id = ? OR v.is_global = 1)";
+    $params[] = $uid;
+} elseif (!isRole('owner', 'assistant')) {
+    // fallback for non-scoped roles
+    $where .= " AND v.created_by = ?";
+    $params[] = $uid;
+}
+
 if ($gid) { $where .= " AND v.group_id = ?"; $params[] = $gid; }
 
 $query = "SELECT v.*,

@@ -15,6 +15,9 @@ $search = trim($_GET['q'] ?? '');
 $status = $_GET['status'] ?? '';
 $page   = max(1, (int)($_GET['page'] ?? 1));
 
+// ── Teacher scope: Academy teachers only see their own groups ──
+[$twhere, $tparams] = teacherScopeWhere('g.teacher_id');
+
 $where  = "WHERE g.center_id = ?";
 $params = [$cid];
 
@@ -26,6 +29,9 @@ if ($search) {
 if ($status === 'active')   { $where .= " AND g.is_active = 1"; }
 if ($status === 'inactive') { $where .= " AND g.is_active = 0"; }
 
+$where  .= $twhere;
+$params  = array_merge($params, $tparams);
+
 $query  = "SELECT g.*,
                   u.name AS teacher_name,
                   COUNT(DISTINCT gs.student_id) AS student_count,
@@ -34,7 +40,7 @@ $query  = "SELECT g.*,
            LEFT JOIN users u ON u.id = g.teacher_id
            LEFT JOIN group_students gs ON gs.group_id = g.id AND gs.status = 'active'
            LEFT JOIN attendance_sessions ats ON ats.group_id = g.id
-           $where
+           {$where}
            GROUP BY g.id
            ORDER BY g.created_at DESC";
 

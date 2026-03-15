@@ -1,6 +1,11 @@
 <?php
 require_once __DIR__ . '/../../includes/helpers.php';
 requireRole('owner','teacher','assistant','accountant');
+// Academy plan: payments are owner-only
+if (isRole('teacher') && isAcademyPlan()) {
+    flash('info', 'Payment management is handled by the academy owner.');
+    redirect('/educore/dashboard.php');
+}
 
 $pdo    = getDB();
 $cid    = centerId();

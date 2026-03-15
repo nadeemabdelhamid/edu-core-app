@@ -12,6 +12,16 @@ $stmt = $pdo->prepare("SELECT * FROM students WHERE id = ? AND center_id = ?");
 $stmt->execute([$sid, $cid]);
 $student = $stmt->fetch();
 if (!$student) { flash('error', 'Student not found.'); redirect('/educore/modules/students/'); }
+// Academy plan: teachers can only view their own assigned students
+if (isRole('teacher') && isAcademyPlan()) {
+    $assigned = $pdo->prepare("SELECT id FROM student_teachers WHERE student_id=? AND teacher_id=? AND center_id=?");
+    $assigned->execute([$student['id'], authId(), centerId()]);
+    if (!$assigned->fetch()) {
+        flash('error', 'Access denied — this student is not assigned to you.');
+        redirect('/educore/modules/students/');
+    }
+}
+
 
 $pageTitle  = sanitize($student['name']);
 $activePage = 'students';

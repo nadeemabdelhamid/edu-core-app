@@ -154,13 +154,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Plan CRUD ────────────────────────────────────────────
     if (in_array($action, ['create_plan','update_plan'])) {
-        $name   = trim($_POST['name'] ?? '');
-        $slug   = trim(strtolower(preg_replace('/[^a-z0-9]+/','-',$_POST['slug'] ?? $name)));
-        $price  = (float)($_POST['price'] ?? 0);
-        $cycle  = $_POST['billing_cycle'] ?? 'monthly';
-        $maxStu = (int)($_POST['max_students'] ?? 50);
-        $maxTch = (int)($_POST['max_teachers'] ?? 3);
-        $maxGrp = (int)($_POST['max_groups'] ?? 10);
+        $name     = trim($_POST['name'] ?? '');
+        $slug     = trim(strtolower(preg_replace('/[^a-z0-9]+/','-',$_POST['slug'] ?? $name)));
+        $planType = in_array($_POST['plan_type'] ?? '', ['individual','academy']) ? $_POST['plan_type'] : 'academy';
+        $price    = (float)($_POST['price'] ?? 0);
+        $cycle    = $_POST['billing_cycle'] ?? 'monthly';
+        // Individual plan: sensible limits; academy: unlimited
+        if ($planType === 'individual') {
+            $maxStu = (int)($_POST['max_students'] ?? 100);
+            $maxTch = 1;  // always 1 for individual
+            $maxGrp = (int)($_POST['max_groups'] ?? 20);
+        } else {
+            $maxStu = (int)($_POST['max_students'] ?? 999999);
+            $maxTch = (int)($_POST['max_teachers'] ?? 999999);
+            $maxGrp = (int)($_POST['max_groups'] ?? 999999);
+        }
         $features = [
             'attendance' => isset($_POST['f_attendance']),
             'exams'      => isset($_POST['f_exams']),
@@ -171,13 +179,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ];
         if ($name) {
             if ($action === 'create_plan') {
-                $pdo->prepare("INSERT INTO plans (name,slug,price,billing_cycle,max_students,max_teachers,max_groups,features) VALUES (?,?,?,?,?,?,?,?)")
-                    ->execute([$name,$slug,$price,$cycle,$maxStu,$maxTch,$maxGrp,json_encode($features)]);
+                $pdo->prepare("INSERT INTO plans (name,slug,plan_type,price,billing_cycle,max_students,max_teachers,max_groups,features) VALUES (?,?,?,?,?,?,?,?,?)")
+                    ->execute([$name,$slug,$planType,$price,$cycle,$maxStu,$maxTch,$maxGrp,json_encode($features)]);
                 flash('success','Plan created.');
             } else {
                 $pid = (int)$_POST['plan_id'];
-                $pdo->prepare("UPDATE plans SET name=?,slug=?,price=?,billing_cycle=?,max_students=?,max_teachers=?,max_groups=?,features=? WHERE id=?")
-                    ->execute([$name,$slug,$price,$cycle,$maxStu,$maxTch,$maxGrp,json_encode($features),$pid]);
+                $pdo->prepare("UPDATE plans SET name=?,slug=?,plan_type=?,price=?,billing_cycle=?,max_students=?,max_teachers=?,max_groups=?,features=? WHERE id=?")
+                    ->execute([$name,$slug,$planType,$price,$cycle,$maxStu,$maxTch,$maxGrp,json_encode($features),$pid]);
                 flash('success','Plan updated.');
             }
         }
@@ -657,14 +665,19 @@ include __DIR__ . '/../../templates/layout.php';
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;">
 <?php foreach($allPlans as $p):
   $pf = json_decode($p['features']??'{}',true)??[];
-  $pc = ['starter'=>'#64748b','pro'=>'#3b82f6','enterprise'=>'#f59e0b'][$p['slug']] ?? 'var(--accent)';
+  $pt = $p['plan_type'] ?? 'academy';
+  $pc = ($pt === 'individual') ? '#8b5cf6' : '#3b82f6';
+  $ptLabel = $pt === 'individual' ? '👤 Individual' : '🏫 Academy';
 ?>
 <div class="plan-card">
   <div style="padding:18px 20px 14px;border-bottom:1px solid var(--border);border-top:3px solid <?=$pc?>;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;">
       <div>
-        <div style="font-size:1.05rem;font-weight:700;color:<?=$pc?>;"><?=sanitize($p['name'])?></div>
-        <div style="font-size:0.71rem;color:var(--text-muted);margin-top:2px;"><?=ucfirst($p['billing_cycle'])?> · <?=$p['sub_count']?> center<?=$p['sub_count']!=1?'s':''?></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <div style="font-size:1.05rem;font-weight:700;color:<?=$pc?>;"><?=sanitize($p['name'])?></div>
+          <span style="font-size:0.65rem;padding:2px 7px;border-radius:8px;background:<?=$pt==='individual'?'rgba(139,92,246,0.1)':'rgba(59,130,246,0.1)'?>;color:<?=$pc?>;font-weight:600;"><?=$ptLabel?></span>
+        </div>
+        <div style="font-size:0.71rem;color:var(--text-muted);"><?=ucfirst($p['billing_cycle'])?> · <?=$p['sub_count']?> center<?=$p['sub_count']!=1?'s':''?></div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:1.5rem;font-weight:800;"><?=$p['price']>0?'$'.number_format($p['price'],0):'Free'?></div>
@@ -1043,15 +1056,34 @@ include __DIR__ . '/../../templates/layout.php';
         <?=csrf_field()?>
         <input type="hidden" name="action" value="<?=$editPlan?'update_plan':'create_plan'?>">
         <?php if($editPlan):?><input type="hidden" name="plan_id" value="<?=$editPlan['id']?>"><?php endif;?>
-        <?php $ef = $editPlan ? (json_decode($editPlan['features']??'{}',true)??[]) : []; ?>
+        <?php $ef = $editPlan ? (json_decode($editPlan['features']??'{}',true)??[]) : [];
+               $ept = $editPlan['plan_type'] ?? 'academy'; ?>
+
+        <!-- Plan type selector -->
+        <div class="form-group" style="margin-bottom:16px;">
+          <label class="form-label required">Plan Type</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" id="planTypeCards">
+            <label style="border:2px solid var(--border);border-radius:var(--radius-md);padding:14px;cursor:pointer;transition:all .15s;" id="ptCardIndividual">
+              <input type="radio" name="plan_type" value="individual" <?=$ept==='individual'?'checked':''?> onchange="onPlanTypeChange('individual')" style="accent-color:var(--accent);margin-right:6px;">
+              <strong>Individual Teacher</strong>
+              <div style="font-size:0.74rem;color:var(--text-muted);margin-top:4px;margin-left:20px;">1 teacher · the owner IS the teacher · limited students &amp; groups</div>
+            </label>
+            <label style="border:2px solid var(--border);border-radius:var(--radius-md);padding:14px;cursor:pointer;transition:all .15s;" id="ptCardAcademy">
+              <input type="radio" name="plan_type" value="academy" <?=$ept==='academy'?'checked':''?> onchange="onPlanTypeChange('academy')" style="accent-color:var(--accent);margin-right:6px;">
+              <strong>Academy</strong>
+              <div style="font-size:0.74rem;color:var(--text-muted);margin-top:4px;margin-left:20px;">Multiple teachers · owner has full oversight · unlimited scale</div>
+            </label>
+          </div>
+        </div>
+
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div class="form-group"><label class="form-label required">Name</label><input type="text" name="name" class="form-control" value="<?=sanitize($editPlan['name']??'')?>" required></div>
-          <div class="form-group"><label class="form-label">Slug</label><input type="text" name="slug" class="form-control" id="planSlug" value="<?=sanitize($editPlan['slug']??'')?>" placeholder="pro"></div>
+          <div class="form-group"><label class="form-label">Slug</label><input type="text" name="slug" class="form-control" id="planSlug" value="<?=sanitize($editPlan['slug']??'')?>" placeholder="individual"></div>
           <div class="form-group"><label class="form-label">Price (USD/mo)</label><input type="number" name="price" class="form-control" step="0.01" min="0" value="<?=$editPlan['price']??0?>"></div>
           <div class="form-group"><label class="form-label">Billing cycle</label><select name="billing_cycle" class="form-control"><?php foreach(['monthly','yearly','lifetime'] as $cy):?><option value="<?=$cy?>" <?=($editPlan['billing_cycle']??'monthly')===$cy?'selected':''?>><?=ucfirst($cy)?></option><?php endforeach;?></select></div>
-          <div class="form-group"><label class="form-label">Max students</label><input type="number" name="max_students" class="form-control" value="<?=$editPlan['max_students']??50?>"></div>
-          <div class="form-group"><label class="form-label">Max teachers</label><input type="number" name="max_teachers" class="form-control" value="<?=$editPlan['max_teachers']??3?>"></div>
-          <div class="form-group" style="grid-column:span 2;"><label class="form-label">Max groups</label><input type="number" name="max_groups" class="form-control" value="<?=$editPlan['max_groups']??10?>"></div>
+          <div class="form-group"><label class="form-label">Max students</label><input type="number" name="max_students" id="pmMaxStu" class="form-control" value="<?=$editPlan['max_students']??100?>"></div>
+          <div class="form-group" id="pmMaxTchGroup"><label class="form-label">Max teachers <span id="pmMaxTchNote" style="font-weight:400;color:var(--text-muted);font-size:0.72rem;">(academy only)</span></label><input type="number" name="max_teachers" id="pmMaxTch" class="form-control" value="<?=$editPlan['max_teachers']??999999?>"></div>
+          <div class="form-group" style="grid-column:span 2;"><label class="form-label">Max groups</label><input type="number" name="max_groups" id="pmMaxGrp" class="form-control" value="<?=$editPlan['max_groups']??20?>"></div>
         </div>
         <div>
           <div class="form-label" style="margin-bottom:8px;">Features included</div>
@@ -1129,6 +1161,42 @@ document.querySelector('input[name="name"]')?.addEventListener('input', function
 });
 document.getElementById('planSlug')?.addEventListener('input', function() { this.dataset.manual=true; });
 <?php endif;?>
+
+function onPlanTypeChange(type) {
+    // Highlight selected card
+    document.getElementById('ptCardIndividual').style.borderColor = type==='individual' ? 'var(--accent)' : 'var(--border)';
+    document.getElementById('ptCardAcademy').style.borderColor    = type==='academy'    ? 'var(--accent)' : 'var(--border)';
+
+    const maxTchGrp  = document.getElementById('pmMaxTchGroup');
+    const maxTchNote = document.getElementById('pmMaxTchNote');
+    const maxStu     = document.getElementById('pmMaxStu');
+    const maxTch     = document.getElementById('pmMaxTch');
+    const maxGrp     = document.getElementById('pmMaxGrp');
+
+    if (type === 'individual') {
+        if (maxTchGrp) { maxTchGrp.style.opacity='0.4'; maxTchGrp.style.pointerEvents='none'; }
+        if (maxTch) { maxTch.value = 1; maxTch.readOnly = true; }
+        if (maxStu && !maxStu.dataset.edited) maxStu.value = 100;
+        if (maxGrp && !maxGrp.dataset.edited) maxGrp.value = 20;
+        if (maxTchNote) maxTchNote.textContent = '(fixed at 1)';
+    } else {
+        if (maxTchGrp) { maxTchGrp.style.opacity='1'; maxTchGrp.style.pointerEvents='auto'; }
+        if (maxTch) { maxTch.readOnly = false; if (maxTch.value == 1) maxTch.value = 999999; }
+        if (maxStu && !maxStu.dataset.edited) maxStu.value = 999999;
+        if (maxGrp && !maxGrp.dataset.edited) maxGrp.value = 999999;
+        if (maxTchNote) maxTchNote.textContent = '(academy only)';
+    }
+}
+
+// Init on load
+(function() {
+    const checked = document.querySelector('input[name="plan_type"]:checked');
+    if (checked) onPlanTypeChange(checked.value);
+    ['pmMaxStu','pmMaxGrp'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', () => el.dataset.edited = true);
+    });
+})();
 </script>
 
 <?php include __DIR__ . '/../../templates/layout_end.php'; ?>

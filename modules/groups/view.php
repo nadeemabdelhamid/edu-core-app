@@ -13,6 +13,12 @@ $gStmt->execute([$gid, $cid]);
 $group = $gStmt->fetch();
 if (!$group) { flash('error', 'Group not found.'); redirect('/educore/modules/groups/'); }
 
+// Academy teachers can only view their own groups
+if (isRole('teacher') && isAcademyPlan() && $group['teacher_id'] != authId()) {
+    flash('error', 'You can only view your own groups.');
+    redirect('/educore/modules/groups/');
+}
+
 $pageTitle  = sanitize($group['name']);
 $activePage = 'groups';
 $breadcrumbs = [

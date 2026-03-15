@@ -217,6 +217,21 @@ include __DIR__ . '/../../templates/layout.php';
 
 <!-- Invite form sidebar -->
 <div>
+  <?php if (isIndividualPlan()): ?>
+  <div class="card">
+    <div class="card-body" style="padding:20px;">
+      <div style="font-size:1.5rem;margin-bottom:10px;">👤</div>
+      <div style="font-weight:700;margin-bottom:6px;">Individual Teacher Plan</div>
+      <p style="font-size:0.82rem;color:var(--text-muted);line-height:1.7;margin-bottom:14px;">
+        Your plan is designed for a single teacher. <strong>You are the teacher</strong> — you have full control over all students, groups, exams, and videos.
+      </p>
+      <p style="font-size:0.82rem;color:var(--text-muted);line-height:1.7;margin-bottom:16px;">
+        To add multiple teachers and manage them, upgrade to the <strong>Academy plan</strong>.
+      </p>
+      <a href="subscription.php" class="btn btn-primary w-full">View Plans →</a>
+    </div>
+  </div>
+  <?php else: ?>
   <div class="card">
     <div class="card-header"><span class="card-title">Invite Staff Member</span></div>
     <div class="card-body">
@@ -246,6 +261,7 @@ include __DIR__ . '/../../templates/layout.php';
       </div>
     </div>
   </div>
+  <?php endif; ?>
 </div>
 </div>
 

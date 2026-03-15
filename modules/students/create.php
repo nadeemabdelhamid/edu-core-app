@@ -18,6 +18,15 @@ if ($editId) {
     $stmt->execute([$editId, $cid]);
     $student = $stmt->fetch();
     if (!$student) { flash('error', 'Student not found.'); redirect('/educore/modules/students/'); }
+    // Academy plan: teachers can only edit their own students
+    if (isRole('teacher') && isAcademyPlan()) {
+        $assigned = $pdo->prepare("SELECT id FROM student_teachers WHERE student_id=? AND teacher_id=? AND center_id=?");
+        $assigned->execute([$editId, authId(), $cid]);
+        if (!$assigned->fetch()) {
+            flash('error', 'Access denied — this student is not assigned to you.');
+            redirect('/educore/modules/students/');
+        }
+    }
     $isEdit = true;
 }
 
