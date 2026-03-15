@@ -11,11 +11,15 @@
 
 // ── Auth ─────────────────────────────────────────────────────
 $isCli = (php_sapi_name() === 'cli');
-$key   = getenv('EDUCORE_CRON_KEY') ?: 'educore_cron_secret';
+$key = getenv('EDUCORE_CRON_KEY');
 
-if (!$isCli && ($_GET['key'] ?? '') !== $key) {
-    http_response_code(403);
-    exit('Unauthorized');
+// HTTP access requires the EDUCORE_CRON_KEY env variable to be set.
+// If it is not configured, block all HTTP access entirely.
+if (!$isCli) {
+    if (!$key || ($_GET['key'] ?? '') !== $key) {
+        http_response_code(403);
+        exit('Unauthorized');
+    }
 }
 
 // ── Bootstrap ────────────────────────────────────────────────

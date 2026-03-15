@@ -20,22 +20,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'password2'      => $_POST['password2'] ?? '',
     ];
 
-    // Collect branches
-    $branchNames    = $_POST['branch_name'] ?? [];
-    $branchAddrs    = $_POST['branch_address'] ?? [];
-    $branchPhones   = $_POST['branch_phone'] ?? [];
-    $branches = [];
-    foreach ($branchNames as $i => $bName) {
-        $bName = trim($bName);
-        if ($bName !== '') {
-            $branches[] = [
-                'name'    => $bName,
-                'address' => trim($branchAddrs[$i] ?? ''),
-                'phone'   => trim($branchPhones[$i] ?? ''),
-            ];
-        }
-    }
-
     if (!$data['center_name']) $errors[] = 'Center name is required.';
     if (!$data['name'])        $errors[] = 'Your name is required.';
     if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) $errors[] = 'Valid email required.';
@@ -59,11 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '-', $data['center_name']));
             $slug = trim($slug, '-') . '-' . substr(uniqid(), -5);
 
-            // Build branches JSON
-            $branchesJson = count($branches) ? json_encode($branches) : null;
-
-            $pdo->prepare("INSERT INTO centers (name, slug, email, phone, address, branches, status) VALUES (?,?,?,?,?,?,'pending')")
-                ->execute([$data['center_name'], $slug, $data['email'], $data['center_phone'], $data['center_address'], $branchesJson]);
+            $pdo->prepare("INSERT INTO centers (name, slug, email, phone, address, status) VALUES (?,?,?,?,?,'pending')")
+                ->execute([$data['center_name'], $slug, $data['email'], $data['center_phone'], $data['center_address']]);
             $centerId = $pdo->lastInsertId();
 
             $hashed = password_hash($data['password'], PASSWORD_BCRYPT);
@@ -71,12 +52,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute([$centerId, $data['name'], $data['email'], $hashed]);
             $userId = $pdo->lastInsertId();
 
-            $planStmt = $pdo->prepare("SELECT id FROM plans WHERE slug='starter' LIMIT 1");
+            // Use 'individual' plan for new registrations (single-teacher plan)
+            $planStmt = $pdo->prepare("SELECT id FROM plans WHERE slug='individual' LIMIT 1");
             $planStmt->execute();
             $planId = $planStmt->fetchColumn();
             if ($planId) {
                 $pdo->prepare("INSERT INTO subscriptions (center_id, plan_id, status, starts_at, expires_at, trial_ends_at)
-                                VALUES (?,?,'pending',NOW(),DATE_ADD(NOW(), INTERVAL 14 DAY),DATE_ADD(NOW(), INTERVAL 14 DAY))")
+                                VALUES (?,?,'trial',NOW(),DATE_ADD(NOW(), INTERVAL 14 DAY),DATE_ADD(NOW(), INTERVAL 14 DAY))")
                     ->execute([$centerId, $planId]);
             }
 
@@ -98,6 +80,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Create Account — EduCore</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/educore/assets/css/app.css">
   <style>
     body {
@@ -187,21 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       color: var(--text-muted);
     }
     .login-redirect a { color: var(--accent); text-decoration: none; font-weight: 600; }
-    .branch-row {
-      background: var(--bg-elevated);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 14px 16px;
-      margin-bottom: 10px;
-      position: relative;
-    }
-    .branch-row .remove-branch {
-      position: absolute; top: 10px; right: 10px;
-      background: none; border: none; cursor: pointer;
-      color: var(--danger); font-size: 1rem; line-height: 1;
-      padding: 2px 6px; border-radius: 4px;
-    }
-    .branch-row .remove-branch:hover { background: var(--danger-dim); }
+
   </style>
 </head>
 <body>
@@ -262,44 +233,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
       </div>
 
-      <!-- ── BRANCHES ── -->
-      <div class="section-divider"><span>Branches <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></span></div>
-
-      <div id="branchesContainer">
-        <?php if (!empty($branches)): ?>
-          <?php foreach ($branches as $i => $b): ?>
-          <div class="branch-row" id="branch_<?= $i ?>">
-            <button type="button" class="remove-branch" onclick="removeBranch(<?= $i ?>)" title="Remove branch">✕</button>
-            <div class="form-row cols-3" style="grid-template-columns:1fr 1fr 1fr;">
-              <div class="form-group" style="margin:0 0 10px;">
-                <label class="form-label" style="font-size:0.75rem;">Branch Name</label>
-                <input type="text" name="branch_name[]" class="form-control form-control-sm"
-                       placeholder="e.g. Cairo Branch"
-                       value="<?= sanitize($b['name']) ?>">
-              </div>
-              <div class="form-group" style="margin:0 0 10px;">
-                <label class="form-label" style="font-size:0.75rem;">Address</label>
-                <input type="text" name="branch_address[]" class="form-control form-control-sm"
-                       placeholder="Branch address"
-                       value="<?= sanitize($b['address']) ?>">
-              </div>
-              <div class="form-group" style="margin:0;">
-                <label class="form-label" style="font-size:0.75rem;">Phone</label>
-                <input type="tel" name="branch_phone[]" class="form-control form-control-sm"
-                       placeholder="+20 100 000 0000"
-                       value="<?= sanitize($b['phone']) ?>">
-              </div>
-            </div>
-          </div>
-          <?php endforeach; ?>
-        <?php endif; ?>
-      </div>
-
-      <button type="button" onclick="addBranch()" class="btn btn-ghost btn-sm" style="margin-bottom:8px;">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add Branch
-      </button>
-
       <!-- ── YOUR ACCOUNT ── -->
       <div class="section-divider"><span>Your Account</span></div>
 
@@ -350,38 +283,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 </div>
 
-<script>
-let branchCount = <?= count($branches) ?>;
 
-function addBranch() {
-  const id = branchCount++;
-  const div = document.createElement('div');
-  div.className = 'branch-row';
-  div.id = 'branch_' + id;
-  div.innerHTML =
-    '<button type="button" class="remove-branch" onclick="removeBranch(' + id + ')" title="Remove">✕</button>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">' +
-      '<div class="form-group" style="margin:0;">' +
-        '<label class="form-label" style="font-size:0.75rem;">Branch Name</label>' +
-        '<input type="text" name="branch_name[]" class="form-control" placeholder="e.g. Alexandria Branch">' +
-      '</div>' +
-      '<div class="form-group" style="margin:0;">' +
-        '<label class="form-label" style="font-size:0.75rem;">Address</label>' +
-        '<input type="text" name="branch_address[]" class="form-control" placeholder="Branch address">' +
-      '</div>' +
-      '<div class="form-group" style="margin:0;">' +
-        '<label class="form-label" style="font-size:0.75rem;">Phone</label>' +
-        '<input type="tel" name="branch_phone[]" class="form-control" placeholder="+20 100 000 0000">' +
-      '</div>' +
-    '</div>';
-  document.getElementById('branchesContainer').appendChild(div);
-  div.querySelector('input').focus();
-}
-
-function removeBranch(id) {
-  const el = document.getElementById('branch_' + id);
-  if (el) el.remove();
-}
-</script>
 </body>
 </html>

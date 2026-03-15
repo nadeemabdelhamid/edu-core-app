@@ -6,7 +6,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
         'lifetime' => 86400 * 7,
         'path'     => '/',
-        'secure'   => false, // set true in production with HTTPS
+        'secure'   => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on',
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
@@ -69,9 +69,8 @@ function requireRole(...$roles) {
 }
 
 function login($user) {
-    // Use false so the old session file is NOT deleted — allows multiple
-    // users to be logged in concurrently on different browsers/devices.
-    session_regenerate_id(false);
+    // Regenerate session ID on login to prevent session fixation attacks.
+    session_regenerate_id(true);
     $_SESSION['user'] = $user;
     // Update last login
     $pdo = getDB();
@@ -339,7 +338,10 @@ function rateLimit($identifier, $action, $maxAttempts = 5, $windowSeconds = 300)
             $pdo->prepare("INSERT INTO rate_limits (identifier, action, attempts, window_start, last_attempt) VALUES (?,?,1,?,?)")->execute([$identifier, $action, $now, $now]);
         }
         return true;
-    } catch (Exception $e) { return true; } // fail open if table missing
+    } catch (Exception $e) {
+        error_log('[EduCore] rateLimit error: ' . $e->getMessage());
+        return true; // fail open if table missing — log so it can be fixed
+    }
 }
 
 // ─── NOTIFICATIONS ───────────────────────────────────────────

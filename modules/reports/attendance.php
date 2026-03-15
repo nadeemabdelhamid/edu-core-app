@@ -18,19 +18,47 @@ $groupId   = (int)($_GET['group'] ?? 0);
 $availYears = range(date('Y'), max(date('Y')-4, 2020));
 $shortMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-// Groups for filter
-$grpList = $pdo->prepare("SELECT id,name FROM `groups` WHERE center_id=? AND is_active=1 ORDER BY name");
-$grpList->execute([$cid]); $groupList = $grpList->fetchAll();
+// Groups for filter — academy teachers see only their own groups
+if (isRole('teacher') && isAcademyPlan()) {
+    $grpList = $pdo->prepare("SELECT id,name FROM `groups` WHERE center_id=? AND teacher_id=? AND is_active=1 ORDER BY name");
+    $grpList->execute([$cid, authId()]);
+} else {
+    $grpList = $pdo->prepare("SELECT id,name FROM `groups` WHERE center_id=? AND is_active=1 ORDER BY name");
+    $grpList->execute([$cid]);
+}
+$groupList = $grpList->fetchAll();
+
+// For academy teachers, restrict all queries to their groups
+$teacherGroupIds = [];
+if (isRole('teacher') && isAcademyPlan()) {
+    $teacherGroupIds = array_column($groupList, 'id');
+    // If teacher has no groups, nothing to show
+}
 
 // ── Center-wide overview ─────────────────────────────────
+// Academy teachers are scoped to their groups
+$atWhere = '';
+$atExtraParams = [];
+if (isRole('teacher') && isAcademyPlan() && !empty($teacherGroupIds)) {
+    $placeholders = implode(',', array_fill(0, count($teacherGroupIds), '?'));
+    $atWhere = " AND s.group_id IN ($placeholders)";
+    $atExtraParams = $teacherGroupIds;
+} elseif (isRole('teacher') && isAcademyPlan() && empty($teacherGroupIds)) {
+    // Teacher has no groups — return empty results
+    $atWhere = " AND 1=0";
+}
+
 $overallStmt = $pdo->prepare("
     SELECT COUNT(*) AS total, SUM(ar.status IN('present','late')) AS present,
            SUM(ar.status='absent') AS absent, SUM(ar.status='late') AS late, SUM(ar.status='excused') AS excused
     FROM attendance_records ar
     JOIN attendance_sessions s ON s.id=ar.session_id
     WHERE ar.center_id=? AND YEAR(s.session_date)=?
-    ".($groupId ? " AND s.group_id=?" : ""));
-$overallParams = $groupId ? [$cid,$year,$groupId] : [$cid,$year];
+    ".($groupId ? " AND s.group_id=?" : "").$atWhere);
+$overallParams = array_merge(
+    $groupId ? [$cid,$year,$groupId] : [$cid,$year],
+    $atExtraParams
+);
 $overallStmt->execute($overallParams);
 $overall = $overallStmt->fetch();
 $totalRec  = (int)$overall['total'];
@@ -46,7 +74,7 @@ $mStmt = $pdo->prepare("
     FROM attendance_records ar
     JOIN attendance_sessions s ON s.id=ar.session_id
     WHERE ar.center_id=? AND YEAR(s.session_date)=?
-    ".($groupId ? " AND s.group_id=?" : "")."
+    ".($groupId ? " AND s.group_id=?" : "").$atWhere."
     GROUP BY m ORDER BY m");
 $mStmt->execute($overallParams);
 $byMonth = array_fill(1,12,['total'=>0,'present'=>0,'absent'=>0,'sessions'=>0,'rate'=>0]);

@@ -5,7 +5,12 @@
  * Use this to verify your group schedules are set up correctly.
  */
 require_once __DIR__ . '/../../includes/helpers.php';
-requireRole('owner');
+requireRole('owner', 'super_admin');
+// Restrict debug tool — additional note for production
+if (!isRole('super_admin') && !defined('EDUCORE_DEBUG')) {
+    flash('info', 'Scheduler debug is disabled. Contact your platform administrator.');
+    redirect('/educore/dashboard.php');
+}
 
 $pdo     = getDB();
 $cid     = centerId();

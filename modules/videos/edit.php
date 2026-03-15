@@ -18,9 +18,13 @@ $video = $stmt->fetch();
 if (!$video) { flash('error', 'Video not found.'); redirect('index.php'); }
 
 // Only owner or creator can edit
-if (!isRole('owner') && $video['created_by'] != $uid) {
-    flash('error', 'You can only edit your own videos.');
-    redirect('index.php');
+// Academy plan: use owner_teacher_id; otherwise fall back to created_by
+if (!isRole('owner')) {
+    $ownerCol = (isAcademyPlan() && !empty($video['owner_teacher_id'])) ? 'owner_teacher_id' : 'created_by';
+    if ($video[$ownerCol] != $uid) {
+    flash('error', 'You can only edit your own video.');
+        redirect('index.php');
+    }
 }
 
 $pageTitle  = 'Edit Video';

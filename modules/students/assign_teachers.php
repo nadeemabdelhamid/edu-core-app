@@ -112,19 +112,7 @@ if ($search) {
     $params = array_merge($params, [$like, $like, $like]);
 }
 
-$students = $pdo->prepare("
-    SELECT s.id, s.name, s.email, s.phone, s.student_code,
-           GROUP_CONCAT(DISTINCT u.name ORDER BY u.name SEPARATOR ', ') AS assigned_teachers,
-           GROUP_CONCAT(DISTINCT st.teacher_id ORDER BY st.teacher_id SEPARATOR ',') AS teacher_ids
-    FROM students s
-    LEFT JOIN student_teachers st ON st.student_id = s.id AND st.center_id = ?
-    LEFT JOIN users u ON u.id = st.teacher_id
-    {$where}
-    GROUP BY s.id
-    ORDER BY s.name
-")->execute([$cid] + []) ?: null;
-
-// Re-execute with full params
+// Single clean query — student list with their teacher assignments
 $stmt = $pdo->prepare("
     SELECT s.id, s.name, s.email, s.phone, s.student_code,
            GROUP_CONCAT(DISTINCT u.name ORDER BY u.name SEPARATOR ', ') AS assigned_teachers,

@@ -13,6 +13,8 @@ ErrorDocument 500 /educore/errors/500.php
     Header always set X-XSS-Protection "1; mode=block"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
     Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    # Content-Security-Policy: allows YouTube/Vimeo embeds, self for all else
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://img.youtube.com https://i.vimeocdn.com; frame-src https://www.youtube.com https://player.vimeo.com; font-src 'self' data:; connect-src 'self';" 
 </IfModule>
 
 # ── Block access to sensitive files ──────────────────────
@@ -27,11 +29,8 @@ ErrorDocument 500 /educore/errors/500.php
     Deny from all
 </FilesMatch>
 
-# ── Prevent PHP execution in uploads (if you add one) ────
-<FilesMatch "\.php$">
-    Order Allow,Deny
-    Allow from all
-</FilesMatch>
+# ── PHP execution is allowed globally (handled by Apache defaults) ──────
+# To block PHP in specific dirs (e.g. uploads), add a .htaccess there.
 
 # ── Disable server-side includes ─────────────────────────
 Options -Includes

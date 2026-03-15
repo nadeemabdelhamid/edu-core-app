@@ -21,15 +21,21 @@ function isAccountExpired(): bool {
     if (!$cid) return false;
 
     // Check subscription status
-    $pdo  = getDB();
-    $stmt = $pdo->prepare("
-        SELECT status, expires_at, trial_ends_at
-        FROM subscriptions
-        WHERE center_id = ?
-        ORDER BY id DESC LIMIT 1
-    ");
-    $stmt->execute([$cid]);
-    $sub = $stmt->fetch();
+    try {
+        $pdo  = getDB();
+        $stmt = $pdo->prepare("
+            SELECT status, expires_at, trial_ends_at
+            FROM subscriptions
+            WHERE center_id = ?
+            ORDER BY id DESC LIMIT 1
+        ");
+        $stmt->execute([$cid]);
+        $sub = $stmt->fetch();
+    } catch (Exception $e) {
+        // DB error — fail open so users are not locked out during maintenance
+        error_log('[EduCore] isAccountExpired error: ' . $e->getMessage());
+        return false;
+    }
 
     if (!$sub) return true; // no subscription = expired
 

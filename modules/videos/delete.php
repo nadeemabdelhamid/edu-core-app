@@ -19,9 +19,13 @@ if (!$video) {
     redirect('index.php');
 }
 
-if (!isRole('owner') && $video['created_by'] != $uid) {
-    flash('error', 'You can only delete your own videos.');
-    redirect('index.php');
+// Academy plan: use owner_teacher_id; otherwise fall back to created_by
+if (!isRole('owner')) {
+    $ownerCol = (isAcademyPlan() && !empty($video['owner_teacher_id'])) ? 'owner_teacher_id' : 'created_by';
+    if ($video[$ownerCol] != $uid) {
+    flash('error', 'You can only delete your own video.');
+        redirect('index.php');
+    }
 }
 
 $pdo->prepare("DELETE FROM video_views WHERE video_id = ?")->execute([$id]);
