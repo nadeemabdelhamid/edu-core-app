@@ -379,6 +379,7 @@ include __DIR__ . '/../../templates/layout.php'; ?>
     <?php foreach($questions as $i => $q):
       $saved     = $savedAnswers[$q['id']] ?? null;
       $opts      = ['a'=>$q['option_a'],'b'=>$q['option_b'],'c'=>$q['option_c'],'d'=>$q['option_d']];
+      $optLabels = ['a'=>optionLabel('a',$q['question']),'b'=>optionLabel('b',$q['question']),'c'=>optionLabel('c',$q['question']),'d'=>optionLabel('d',$q['question'])];
       $isMulti   = !empty($q['is_multi_select']);
       $isBm      = isset($bookmarks[$q['id']]);
       $savedMulti= $isMulti ? array_filter(explode(',',$saved??'')) : [];
@@ -411,7 +412,7 @@ include __DIR__ . '/../../templates/layout.php'; ?>
                 <input type="checkbox" name="q_<?=$q['id']?>[]" value="<?=$k?>" <?=$chk?'checked':''?>
                        onchange="onMultiChange(<?=$q['id']?>)"
                        style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0;">
-                <span style="width:20px;height:20px;background:var(--bg-elevated);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;color:var(--text-muted);flex-shrink:0;"><?=strtoupper($k)?></span>
+                <span style="width:20px;height:20px;background:var(--bg-elevated);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;color:var(--text-muted);flex-shrink:0;"><?=$optLabels[$k]?></span>
                 <?=sanitize($v)?>
               </label>
               <?php else: $sel=$saved===$k; ?>
@@ -419,7 +420,7 @@ include __DIR__ . '/../../templates/layout.php'; ?>
                 <input type="radio" name="q_<?=$q['id']?>" value="<?=$k?>" <?=$sel?'checked':''?>
                        onchange="onRadioChange(<?=$q['id']?>,this)"
                        style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0;">
-                <span style="width:20px;height:20px;background:var(--bg-elevated);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;color:var(--text-muted);flex-shrink:0;"><?=strtoupper($k)?></span>
+                <span style="width:20px;height:20px;background:var(--bg-elevated);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;color:var(--text-muted);flex-shrink:0;"><?=$optLabels[$k]?></span>
                 <?=sanitize($v)?>
               </label>
               <?php endif; ?>

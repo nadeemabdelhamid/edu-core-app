@@ -399,73 +399,26 @@ include __DIR__ . '/../../templates/layout.php';
 </div>
 </div>
 
-<div id="printSlip" style="display:none; position:fixed; inset:0; background:#fff; z-index:9999; padding-top:10vh; font-family:sans-serif; overflow-y:auto;">
-  <div style="max-width:460px; margin:0 auto; border:1px solid #f5a623; border-radius:8px; padding:32px 40px; background:#fff; box-shadow:0 4px 15px rgba(0,0,0,0.05);">
-    
-    <div style="text-align:center; margin-bottom:28px;">
-      <div style="font-size:2.2rem; margin-bottom:4px;">🎓</div>
-      <h2 style="margin:0; font-size:1.35rem; color:#1f2937; font-weight:700;">EduCore Student Login</h2>
-      <p style="margin:6px 0 0; font-size:0.85rem; color:#6b7280;">Keep this card safe — do not share your password</p>
+<!-- Printable credential slip (hidden, triggered by JS) -->
+<div id="printSlip" style="display:none;position:fixed;inset:0;background:#fff;z-index:9999;padding:40px;font-family:Arial,sans-serif;">
+  <div style="max-width:380px;margin:0 auto;border:2px solid #f5a623;border-radius:10px;padding:28px;">
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:1.8rem;margin-bottom:4px;">🎓</div>
+      <h2 style="margin:0;font-size:1.2rem;color:#1a1a1a;">EduCore Student Login</h2>
+      <p style="margin:4px 0 0;font-size:0.75rem;color:#888;">Keep this card safe — do not share your password</p>
     </div>
-
-    <div style="margin-bottom:32px;">
-      <table style="width:100%; border-collapse:collapse; font-size:0.95rem; text-align:left;">
-        <tr style="border-bottom:1px solid #f3f4f6;">
-          <td style="padding:14px 10px; color:#6b7280; width:35%;">Student</td>
-          <td style="padding:14px 10px; font-weight:700; color:#111827;" id="ps_name"></td>
-        </tr>
-        <tr style="border-bottom:1px solid #f3f4f6;">
-          <td style="padding:14px 10px; color:#6b7280;">Code</td>
-          <td style="padding:14px 10px; font-family:monospace; font-weight:700; color:#f5a623; font-size:1.05rem;" id="ps_code">#<?= sanitize($student['student_code']) ?></td>
-        </tr>
-        <tr style="border-bottom:1px solid #f3f4f6;">
-          <td style="padding:14px 10px; color:#6b7280;">Username</td>
-          <td style="padding:14px 10px; font-family:monospace; font-size:0.95rem; word-break:break-all; color:#111827;" id="ps_user"></td>
-        </tr>
-        <tr style="background:#fffcf2; border-bottom:1px solid #f3f4f6;">
-          <td style="padding:18px 10px; color:#6b7280;">Password</td>
-          <td style="padding:18px 10px; font-family:monospace; font-size:1.2rem; font-weight:800; letter-spacing:4px; color:#111827;" id="ps_pass"></td>
-        </tr>
-        <tr>
-          <td style="padding:14px 10px; color:#6b7280;">Login URL</td>
-          <td style="padding:14px 10px; font-size:0.85rem; color:#4b5563;">http://localhost/educore/login.php</td>
-        </tr>
-      </table>
+    <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+      <tr style="border-bottom:1px solid #eee;"><td style="padding:10px 0;color:#666;width:35%;">Student</td><td style="padding:10px 0;font-weight:600;" id="ps_name"></td></tr>
+      <tr style="border-bottom:1px solid #eee;"><td style="padding:10px 0;color:#666;">Code</td><td style="padding:10px 0;font-family:monospace;font-weight:700;color:#f5a623;font-size:1rem;" id="ps_code">#<?= sanitize($student['student_code']) ?></td></tr>
+      <tr style="border-bottom:1px solid #eee;"><td style="padding:10px 0;color:#666;">Username</td><td style="padding:10px 0;font-family:monospace;font-size:0.78rem;word-break:break-all;" id="ps_user"></td></tr>
+      <tr style="border-bottom:1px solid #eee;background:#fffbf0;"><td style="padding:12px 0;color:#666;">Password</td><td style="padding:12px 0;font-family:monospace;font-size:1.3rem;font-weight:800;letter-spacing:3px;" id="ps_pass"></td></tr>
+      <tr><td style="padding:10px 0;color:#666;">Login URL</td><td style="padding:10px 0;font-size:0.72rem;color:#555;">http://localhost/educore/login.php</td></tr>
+    </table>
+    <div style="margin-top:20px;text-align:center;">
+      <button onclick="window.print()" style="background:#f5a623;color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:0.9rem;font-weight:600;cursor:pointer;">🖨 Print</button>
+      <button onclick="closePrint()" style="background:#eee;color:#333;border:none;padding:10px 24px;border-radius:6px;font-size:0.9rem;margin-left:10px;cursor:pointer;">Close</button>
     </div>
-
-    <div style="display:flex; justify-content:center; gap:12px;" class="no-print">
-      <button onclick="window.print()" style="background:#f5a623; color:#fff; border:none; padding:10px 24px; border-radius:6px; font-size:1rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px; transition:opacity 0.2s;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-        Print
-      </button>
-      <button onclick="closePrint()" style="background:#e5e7eb; color:#374151; border:none; padding:10px 28px; border-radius:6px; font-size:1rem; font-weight:500; cursor:pointer; transition:background 0.2s;">
-        Close
-      </button>
-    </div>
-
   </div>
-
-  <style>
-    /* Ensure only the card prints, and it looks clean on paper */
-    @media print {
-      .no-print { display: none !important; }
-      body * { visibility: hidden; }
-      #printSlip, #printSlip * { visibility: visible; }
-      #printSlip { 
-        position: absolute; left: 0; top: 0; width: 100%; 
-        padding: 0; background: transparent; 
-      }
-      #printSlip > div { 
-        border: none !important; box-shadow: none !important; 
-        max-width: 100%; margin: 0; padding: 20px;
-      }
-      /* Force background color for the password row on webkit printers */
-      tr[style*="background:#fffcf2"] {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-    }
-  </style>
 </div>
 
 <script>

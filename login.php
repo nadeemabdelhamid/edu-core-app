@@ -358,13 +358,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <a href="/educore/register.php">Create your account →</a>
     </div>
 
-    <div class="demo-credentials">
-      <strong>Demo credentials:</strong><br>
-      Admin: admin@educore.io / password<br>
-      <span style="color:var(--text-muted);font-size:0.68rem;">
-        After setup, create your own center account via Register.
-      </span>
-    </div>
+    
   </div>
 
 </div>

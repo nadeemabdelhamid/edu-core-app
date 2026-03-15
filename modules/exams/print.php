@@ -148,7 +148,7 @@ foreach ($byType as $type=>$qs):
       $ok  = $showKey && strtolower($q['correct_answer'])===$ltr;
     ?>
     <li class="opt<?=$ok?' correct-opt':''?>">
-      <strong><?=strtoupper($ltr)?>.</strong>
+      <strong><?=optionLabel($ltr, $q['question'] ?? '')?>.</strong>
       <?=sanitize($opt)?>
       <?php if ($ok): ?><strong style="color:#155724;"> ✓</strong><?php endif; ?>
     </li>

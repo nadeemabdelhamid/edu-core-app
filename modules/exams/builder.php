@@ -237,7 +237,7 @@ include __DIR__ . '/../../templates/layout.php';
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
               <?php foreach($opts as $k=>$v): if(!$v) continue; ?>
               <div style="font-size:0.8rem;padding:4px 8px;border-radius:4px;<?=$q['correct_answer']===$k?'background:rgba(34,197,94,0.1);color:var(--success);font-weight:600;':'color:var(--text-secondary);'?>">
-                <?=strtoupper($k)?>) <?=sanitize($v)?>
+                <?=optionLabel($k, $q['question'] ?? '')?>) <?=sanitize($v)?>
                 <?php if($q['correct_answer']===$k): ?> ✓<?php endif; ?>
               </div>
               <?php endforeach; ?>
@@ -335,7 +335,8 @@ include __DIR__ . '/../../templates/layout.php';
 
         <!-- MCQ options -->
         <div id="mcqOptions">
-          <?php foreach(['a'=>'Option A','b'=>'Option B','c'=>'Option C','d'=>'Option D'] as $k=>$l): ?>
+          <?php $bOptLabels=['a'=>'ا — '.optionLabel('a'),'b'=>'ب — '.optionLabel('b'),'c'=>'ج — '.optionLabel('c'),'d'=>'د — '.optionLabel('d')];
+          foreach(['a'=>'Option A / ا','b'=>'Option B / ب','c'=>'Option C / ج','d'=>'Option D / د'] as $k=>$l): ?>
           <div class="form-group" style="margin-bottom:10px;">
             <label class="form-label" style="font-size:0.72rem;"><?=$l?></label>
             <input type="text" name="opt_<?=$k?>" id="opt_<?=$k?>" class="form-control" style="font-size:0.84rem;" placeholder="<?=$l?>…">
@@ -344,7 +345,7 @@ include __DIR__ . '/../../templates/layout.php';
           <div class="form-group">
             <label class="form-label required">Correct Answer</label>
             <select name="correct" id="correctMcq" class="form-control">
-              <option value="a">A</option><option value="b">B</option><option value="c">C</option><option value="d">D</option>
+              <option value="a">A / ا</option><option value="b">B / ب</option><option value="c">C / ج</option><option value="d">D / د</option>
             </select>
           </div>
         </div>
@@ -360,7 +361,7 @@ include __DIR__ . '/../../templates/layout.php';
           <div id="multiCorrectWrap" style="display:none;margin-bottom:10px;">
             <label class="form-label" style="font-size:.72rem;">Correct Answers (check all that apply)</label>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
-              <?php foreach(['a'=>'A','b'=>'B','c'=>'C','d'=>'D'] as $k=>$l): ?>
+              <?php foreach(['a'=>'A / ا','b'=>'B / ب','c'=>'C / ج','d'=>'D / د'] as $k=>$l): ?>
               <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;cursor:pointer;">
                 <input type="checkbox" name="correct_multi[]" value="<?=$k?>" id="mc_<?=$k?>" style="accent-color:var(--accent);">
                 Option <?=$l?>

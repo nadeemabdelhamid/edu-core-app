@@ -516,6 +516,21 @@ const GV = id => (G(id)?.value??'').trim();
 const esc= s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 const dvd= s => s==='double'?'3px double #000':s==='thick'?'3px solid #000':s==='single'?'1.5px solid #000':'none';
 
+// Arabic/Latin option label — returns ا ب ج د for Arabic questions, A B C D otherwise
+const AR_LABELS = ['ا','ب','ج','د','ه'];
+const LA_LABELS = ['A','B','C','D','E'];
+function getOptLabel(idx, questionText) {
+  const isAr = /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(questionText || '');
+  return (isAr ? AR_LABELS : LA_LABELS)[idx] || String(idx + 1);
+}
+// Inverse: given letter (A/B/ا/ب), get index
+function labelToIdx(label) {
+  const li = LA_LABELS.indexOf(label.toUpperCase());
+  if (li >= 0) return li;
+  const ai = AR_LABELS.indexOf(label);
+  return ai >= 0 ? ai : 0;
+}
+
 // ══ Tab / page switching ══════════════════════════════════════
 function tab(name){
   document.querySelectorAll('.sp-tab').forEach((t,i)=>t.classList.toggle('on',['setup','questions','layout','pages'][i]===name));
@@ -661,13 +676,13 @@ function buildList(){
         ${item.type==='mcq'?`<div class="og">
           ${['A','B','C','D'].map((l,oi)=>`<input type="text" class="form-control"
             value="${esc(item.opts[oi]||'')}" oninput="upd(${item.id},'opt${oi}',this.value)"
-            placeholder="${l}…">`).join('')}
+            placeholder="${l} / ${getOptLabel(oi,item.text)}…">`).join('')}
         </div>
         <div style="margin-top:5px;font-size:.71rem;color:var(--text-muted);">Correct:
           <select onchange="upd(${item.id},'answer',this.value)"
                   class="form-control" style="width:auto;display:inline-block;font-size:.76rem;">
             <option value="">—</option>
-            ${['A','B','C','D'].map(l=>`<option value="${l}" ${item.answer===l?'selected':''}>${l}</option>`).join('')}
+            ${['A','B','C','D'].map((l,oi)=>`<option value="${l}" ${item.answer===l?'selected':''}>${l} / ${getOptLabel(oi,item.text)}</option>`).join('')}
           </select>
         </div>`:''}
         ${item.type==='tf'?`<div style="margin-top:5px;font-size:.71rem;color:var(--text-muted);">Correct:
@@ -819,11 +834,12 @@ function buildExam(showKey){
         </div>`;
 
       if(item.type==='mcq'){
-        const lets=['A','B','C','D','E'].slice(0,+GV('p_bch')||4);
+        const numOpts=+GV('p_bch')||4;
         h+=`<ul class="pp-opts ${optCls}">`;
-        lets.forEach((l,oi)=>{
+        Array.from({length:numOpts},(_,oi)=>oi).forEach(oi=>{
           const opt=item.opts[oi]; if(!opt) return;
-          const ok=key&&item.answer===l;
+          const l=getOptLabel(oi,item.text);
+          const ok=key&&item.answer===['a','b','c','d','e'][oi];
           h+=`<li class="pp-opt" ${ok?'style="background:#d4edda;border-radius:3px;padding:1px 4px;"':''}>
             <span class="pp-ok">${l}.</span>${opt}${ok?` <strong style="color:#155724;">✓</strong>`:''}
           </li>`;
@@ -938,7 +954,7 @@ function buildBubble(){
   const ch=+GV('p_bch')||4, cols=+GV('p_bcl')||2;
   const bqc=+GV('p_bqc');
   const cnt=bqc||items.filter(i=>i.type==='mcq').length;
-  const lets=['A','B','C','D','E'].slice(0,ch);
+  const lets=Array.from({length:ch},(_,i)=>isAr?AR_LABELS[i]:LA_LABELS[i]);
   const showEx=GV('p_bex')!=='0';
   const rtlDir=isAr?' dir="rtl"':'';
   const arL={Name:'الاسم','Student ID':'رقم الطالب','Class / Group':'الفصل',Score:'الدرجة'};

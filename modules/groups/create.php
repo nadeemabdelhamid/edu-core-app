@@ -71,16 +71,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $data = [
-        'name'        => trim($_POST['name'] ?? ''),
-        'subject'     => trim($_POST['subject'] ?? ''),
-        'description' => trim($_POST['description'] ?? ''),
-        'teacher_id'  => (int)($_POST['teacher_id'] ?? 0) ?: null,
-        'capacity'    => max(1, (int)($_POST['capacity'] ?? 30)),
-        'monthly_fee' => (float)($_POST['monthly_fee'] ?? 0),
-        'start_date'  => $_POST['start_date'] ?? null,
-        'end_date'    => $_POST['end_date'] ?? null,
-        'is_active'   => isset($_POST['is_active']) ? 1 : 0,
-        'schedule'    => json_encode($scheduleSlots),
+        'name'                     => trim($_POST['name'] ?? ''),
+        'subject'                  => trim($_POST['subject'] ?? ''),
+        'description'              => trim($_POST['description'] ?? ''),
+        'teacher_id'               => (int)($_POST['teacher_id'] ?? 0) ?: null,
+        'capacity'                 => max(1, (int)($_POST['capacity'] ?? 30)),
+        'monthly_fee'              => (float)($_POST['monthly_fee'] ?? 0),
+        'start_date'               => $_POST['start_date'] ?? null,
+        'end_date'                 => $_POST['end_date'] ?? null,
+        'is_active'                => isset($_POST['is_active']) ? 1 : 0,
+        'schedule'                 => json_encode($scheduleSlots),
+        'session_duration_minutes' => max(15, min(480, (int)($_POST['session_duration_minutes'] ?? 120))),
     ];
 
     if (!$data['name']) $errors[] = 'Group name is required.';
@@ -88,22 +89,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$errors) {
         if ($isEdit) {
             $pdo->prepare("UPDATE `groups` SET name=?, subject=?, description=?, teacher_id=?,
-                            capacity=?, monthly_fee=?, start_date=?, end_date=?, is_active=?, schedule=?
+                            capacity=?, monthly_fee=?, start_date=?, end_date=?, is_active=?, schedule=?, session_duration_minutes=?
                             WHERE id=? AND center_id=?")
                 ->execute([$data['name'], $data['subject'] ?: null, $data['description'] ?: null,
                            $data['teacher_id'], $data['capacity'], $data['monthly_fee'],
                            $data['start_date'] ?: null, $data['end_date'] ?: null,
-                           $data['is_active'], $data['schedule'], $editId, $cid]);
+                           $data['is_active'], $data['schedule'], $data['session_duration_minutes'],
+                           $editId, $cid]);
             auditLog('group.updated', 'group', $editId, ['name' => $data['name']]);
             flash('success', 'Group updated successfully.');
         } else {
             $pdo->prepare("INSERT INTO `groups` (center_id, name, subject, description, teacher_id,
-                            capacity, monthly_fee, start_date, end_date, is_active, schedule)
-                            VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+                            capacity, monthly_fee, start_date, end_date, is_active, schedule, session_duration_minutes)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
                 ->execute([$cid, $data['name'], $data['subject'] ?: null, $data['description'] ?: null,
                            $data['teacher_id'], $data['capacity'], $data['monthly_fee'],
                            $data['start_date'] ?: null, $data['end_date'] ?: null,
-                           $data['is_active'], $data['schedule']]);
+                           $data['is_active'], $data['schedule'], $data['session_duration_minutes']]);
             $newId = $pdo->lastInsertId();
             auditLog('group.created', 'group', $newId, ['name' => $data['name']]);
             flash('success', 'Group created successfully.');
@@ -311,6 +313,20 @@ include __DIR__ . '/../../templates/layout.php';
               <div style="font-size:0.72rem; color:var(--text-muted);">Accepts attendance sessions</div>
             </div>
           </label>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">⏱ Session Duration</span></div>
+        <div class="card-body">
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">Auto-close after (minutes)</label>
+            <input type="number" name="session_duration_minutes" class="form-control"
+                   min="15" max="480" step="15"
+                   value="<?= (int)($data['session_duration_minutes'] ?? 120) ?>"
+                   placeholder="120">
+            <span class="form-hint">Sessions auto-open at scheduled time and close after this many minutes. Default: 120 min (2 hours)</span>
+          </div>
         </div>
       </div>
 

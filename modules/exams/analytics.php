@@ -198,7 +198,7 @@ include __DIR__ . '/../../templates/layout.php';
               $ok   = strtolower($q['correct_answer'])===$ltr;
             ?>
             <span style="font-size:0.67rem;padding:2px 7px;border-radius:4px;background:<?=$ok?'rgba(34,197,94,0.15)':'var(--bg-elevated)'?>;color:<?=$ok?'var(--success)':'var(--text-muted)'?>;">
-              <?=strtoupper($ltr)?>: <?=$pct2?>%
+              <?=optionLabel($ltr, $q['question'] ?? '')?>: <?=$pct2?>%
             </span>
             <?php endforeach; ?>
           </div>

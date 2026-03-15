@@ -2,6 +2,9 @@
 // templates/layout.php
 // Usage: set $pageTitle, $activePage, $breadcrumbs before including
 requireAuth();
+blockIfExpired();
+// Run auto-scheduler after auth is confirmed (throttled to once/min)
+if (!isRole('student')) runScheduler();
 $user = auth();
 $initials = strtoupper(substr($user['name'], 0, 2));
 
@@ -53,9 +56,8 @@ if ($user['role'] === 'student') {
 // Super admin gets extra items
 if ($user['role'] === 'super_admin') {
     $navItems['platform'] = [
-        ['href' => '/educore/modules/admin/centers.php',  'icon' => 'briefcase', 'label' => 'Centers',  'key' => 'admin_centers'],
-        ['href' => '/educore/modules/admin/plans.php',    'icon' => 'star',      'label' => 'Plans',    'key' => 'admin_plans'],
-        ['href' => '/educore/modules/admin/users.php',    'icon' => 'user',      'label' => 'All Users','key' => 'admin_users'],
+        ['href' => '/educore/modules/admin/centers.php',          'icon' => 'briefcase', 'label' => 'Centers',  'key' => 'admin_centers'],
+        ['href' => '/educore/modules/admin/centers.php?view=plans','icon' => 'star',      'label' => 'Plans',    'key' => 'admin_plans'],
     ];
 }
 
@@ -99,11 +101,10 @@ $sectionLabels = [
   <link rel="stylesheet" href="/educore/assets/css/app.css">
   <meta name="csrf-token" content="<?= csrf_token() ?>">
   <script>
-  // Apply dark class IMMEDIATELY — before any paint — to prevent flash
+  // Apply dark class IMMEDIATELY — only when user has explicitly chosen dark mode.
+  // Default is always LIGHT (white theme).
   (function(){
-    var dark = localStorage.getItem('ec_dark_mode');
-    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (dark === '1' || (dark === null && prefersDark)) {
+    if (localStorage.getItem('ec_dark_mode') === '1') {
       document.documentElement.classList.add('dark');
     }
   })();
@@ -275,6 +276,9 @@ $sectionLabels = [
 
       </div>
     </header>
+
+    <!-- EXPIRED ACCOUNT BANNER -->
+    <?php echo expiredBannerHtml(); ?>
 
     <!-- TRIAL BANNER -->
     <?php if($trialLeft !== null && $trialLeft <= 7 && !isRole('student')): ?>

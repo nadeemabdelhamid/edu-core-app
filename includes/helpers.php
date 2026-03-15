@@ -358,3 +358,47 @@ function videoThumbnailUrl(string $provider, string $videoId): string {
     }
     return ''; // Vimeo thumbnails require an API call — handled in create.php
 }
+
+// ─── FEATURE MODULES (loaded after all helpers defined) ────
+require_once __DIR__ . '/access_guard.php';
+require_once __DIR__ . '/scheduler.php';
+
+// ─── MCQ OPTION LABELS ────────────────────────────────────
+/**
+ * Returns the display label for an MCQ option key (a/b/c/d).
+ * If the question text is Arabic, returns Arabic abjad letters (ا ب ج د).
+ * Otherwise returns uppercase Latin (A B C D).
+ *
+ * @param string $key       'a'|'b'|'c'|'d'
+ * @param string $questionText  The question text — used to detect Arabic
+ * @return string
+ */
+function optionLabel(string $key, string $questionText = ''): string {
+    $arabicMap = ['a' => 'ا', 'b' => 'ب', 'c' => 'ج', 'd' => 'د'];
+    $latinMap  = ['a' => 'A', 'b' => 'B', 'c' => 'C', 'd' => 'D'];
+
+    // Detect Arabic: check if question contains Arabic Unicode characters
+    $isArabic = (bool) preg_match('/[\x{0600}-\x{06FF}\x{0750}-\x{077F}\x{FB50}-\x{FDFF}\x{FE70}-\x{FEFF}]/u', $questionText);
+
+    $map = $isArabic ? $arabicMap : $latinMap;
+    return $map[strtolower($key)] ?? strtoupper($key);
+}
+
+/**
+ * Returns ordered option arrays for a question, using Arabic or Latin labels.
+ * Usage: [$labels, $opts] = optionSet($question);
+ *
+ * @param array $q  Question row from DB
+ * @return array    [labels_map, options_map] e.g. ['a'=>'ا','b'=>'ب',...], ['a'=>'text',...]
+ */
+function optionSet(array $q): array {
+    $opts   = ['a' => $q['option_a'] ?? '', 'b' => $q['option_b'] ?? '',
+               'c' => $q['option_c'] ?? '', 'd' => $q['option_d'] ?? ''];
+    $labels = [];
+    foreach (array_keys($opts) as $k) {
+        $labels[$k] = optionLabel($k, $q['question'] ?? '');
+    }
+    return [$labels, $opts];
+}
+
+

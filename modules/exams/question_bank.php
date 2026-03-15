@@ -341,6 +341,7 @@ include __DIR__ . '/../../templates/layout.php';
       foreach($questions as $q):
         $diff   = $q['difficulty'] ?? 'medium';
         $opts   = ['a'=>$q['option_a'],'b'=>$q['option_b'],'c'=>$q['option_c'],'d'=>$q['option_d']];
+        $optLabels = ['a'=>optionLabel('a',$q['question']),'b'=>optionLabel('b',$q['question']),'c'=>optionLabel('c',$q['question']),'d'=>optionLabel('d',$q['question'])];
         $qSubj  = $q['subject'] ?: 'No Subject';
 
         if ($qSubj !== $curSubj):
@@ -382,7 +383,7 @@ include __DIR__ . '/../../templates/layout.php';
         <div class="qb-options">
           <?php foreach($opts as $k=>$v): if(!$v) continue; ?>
           <span class="qb-opt <?=$q['correct_answer']===$k?'correct':'wrong'?>">
-            <?=strtoupper($k)?>) <?=sanitize($v)?><?=$q['correct_answer']===$k?' ✓':''?>
+            <?=$optLabels[$k]?>) <?=sanitize($v)?><?=$q['correct_answer']===$k?' ✓':''?>
           </span>
           <?php endforeach; ?>
         </div>
@@ -530,7 +531,7 @@ include __DIR__ . '/../../templates/layout.php';
         <div id="bMcqOpts">
           <div style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
                       color:var(--text-muted);margin-bottom:10px;">Answer Options</div>
-          <?php foreach(['a'=>'A','b'=>'B','c'=>'C','d'=>'D'] as $k=>$l): ?>
+          <?php foreach(['a'=>'A / ا','b'=>'B / ب','c'=>'C / ج','d'=>'D / د'] as $k=>$l): ?>
           <div class="opt-row">
             <span style="font-size:.8rem;font-weight:700;color:var(--text-muted);width:16px;"><?=$l?></span>
             <input type="text" name="opt_<?=$k?>" id="bOpt_<?=$k?>" class="form-control"

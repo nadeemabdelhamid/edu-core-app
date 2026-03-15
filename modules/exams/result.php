@@ -273,6 +273,7 @@ include __DIR__ . '/../../templates/layout.php';
   <div class="card-body no-padding">
     <?php foreach($questions as $i => $q):
       $opts   = ['a'=>$q['option_a'],'b'=>$q['option_b'],'c'=>$q['option_c'],'d'=>$q['option_d']];
+      $optLabels = ['a'=>optionLabel('a',$q['question']),'b'=>optionLabel('b',$q['question']),'c'=>optionLabel('c',$q['question']),'d'=>optionLabel('d',$q['question'])];
       $ans    = $q['student_answer'] ?? null;
       $isCorrect = $q['is_correct'];
       $rowBg  = '';
@@ -303,7 +304,7 @@ include __DIR__ . '/../../templates/layout.php';
               <?php if($k===$q['correct_answer']): ?>background:rgba(34,197,94,0.1);color:var(--success);font-weight:600;
               <?php elseif($k===$ans && $ans!==$q['correct_answer']): ?>background:rgba(239,68,68,0.1);color:var(--danger);
               <?php else: ?>color:var(--text-muted);<?php endif; ?>">
-              <?=strtoupper($k)?>) <?=sanitize($v)?>
+              <?=$optLabels[$k]?>) <?=sanitize($v)?>
               <?php if($k===$q['correct_answer']): ?> ✓<?php endif; ?>
               <?php if($k===$ans && $ans!==$q['correct_answer']): ?> ← Your answer<?php endif; ?>
             </div>
