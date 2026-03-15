@@ -967,6 +967,14 @@ select.form-control {
   font-size: 0.8rem;
 }
 
+.notif-panel-foot {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+
 /* User chip */
 .topbar-user-chip {
   display: flex;

@@ -4,11 +4,28 @@ requireRole('super_admin');
 
 $pdo = getDB();
 
-$pageTitle  = 'Super Admin';
-$activePage = 'admin_centers';
-$breadcrumbs = [['label' => 'Super Admin']];
+$pageTitle   = 'Super Admin';
+$view        = $_GET['view'] ?? 'centers';
 
-$view = $_GET['view'] ?? 'centers';
+// Map view → nav key so the correct sidebar item highlights
+$activePageMap = [
+    'centers'           => 'admin_centers',
+    'center_detail'     => 'admin_centers',
+    'plans'             => 'admin_plans',
+    'password_requests' => 'admin_passwords',
+    'notifications'     => 'admin_notifications',
+];
+$activePage  = $activePageMap[$view] ?? 'admin_centers';
+
+// Breadcrumb labels per view
+$viewLabels = [
+    'centers'           => 'Centers',
+    'center_detail'     => 'Center Detail',
+    'plans'             => 'Plans',
+    'password_requests' => 'Password Requests',
+    'notifications'     => 'Notifications',
+];
+$breadcrumbs = [['label' => 'Super Admin', 'href' => '/educore/modules/admin/centers.php'], ['label' => $viewLabels[$view] ?? 'Centers']];
 
 // ── Ensure password_reset_requests table exists ──────────────
 try {

@@ -20,44 +20,75 @@ $roleColors = [
 $userColor = $roleColors[$user['role']] ?? '#f5a623';
 $flashMessages = getFlash();
 
-// ── Student portal gets its own lean nav ────────────────────
+// ── Build nav based on role ─────────────────────────────────
+
 if ($user['role'] === 'student') {
+    // ── Student portal: lean, focused nav ───────────────────
     $navItems = [
         'main' => [
-            ['href' => '/educore/modules/students/home.php',             'icon' => 'grid',         'label' => 'My Dashboard',  'key' => 'student_home'],
-            ['href' => '/educore/modules/attendance/submit.php',         'icon' => 'check-square', 'label' => 'Attendance',    'key' => 'attendance'],
-            ['href' => '/educore/modules/exams/student.php',             'icon' => 'file-text',    'label' => 'My Exams',      'key' => 'exams'],
-            ['href' => '/educore/modules/students/videos.php',           'icon' => 'play-circle',  'label' => 'Lectures',      'key' => 'videos', 'feature' => 'videos'],
+            ['href' => '/educore/modules/students/home.php',         'icon' => 'grid',         'label' => 'My Dashboard', 'key' => 'student_home'],
+            ['href' => '/educore/modules/attendance/submit.php',     'icon' => 'check-square', 'label' => 'Attendance',   'key' => 'attendance'],
+            ['href' => '/educore/modules/exams/student.php',         'icon' => 'file-text',    'label' => 'My Exams',     'key' => 'exams'],
+            ['href' => '/educore/modules/students/videos.php',       'icon' => 'play-circle',  'label' => 'Lectures',     'key' => 'videos', 'feature' => 'videos'],
         ],
         'account' => [
-            ['href' => '/educore/modules/students/profile.php',          'icon' => 'user',         'label' => 'My Profile',    'key' => 'student_profile'],
+            ['href' => '/educore/modules/students/profile.php',      'icon' => 'user',         'label' => 'My Profile',   'key' => 'student_profile'],
         ],
     ];
+
+} elseif ($user['role'] === 'super_admin') {
+    // ── Super admin: platform-only nav, no center clutter ───
+    try {
+        $_sa_pdo      = getDB();
+        $_sa_pending  = (int)$_sa_pdo->query("SELECT COUNT(*) FROM centers WHERE status='pending'")->fetchColumn();
+        try { $_sa_resets = (int)$_sa_pdo->query("SELECT COUNT(*) FROM password_reset_requests WHERE status='pending'")->fetchColumn(); } catch(Exception $e){ $_sa_resets=0; }
+        $_sa_expiring = (int)$_sa_pdo->query("SELECT COUNT(*) FROM subscriptions WHERE status='active' AND expires_at BETWEEN NOW() AND DATE_ADD(NOW(),INTERVAL 7 DAY)")->fetchColumn();
+    } catch(Exception $e) { $_sa_pending=0; $_sa_resets=0; $_sa_expiring=0; }
+
+    $navItems = [
+        'platform' => [
+            ['href' => '/educore/modules/admin/centers.php',
+             'icon' => 'briefcase', 'label' => 'Centers',
+             'key'  => 'admin_centers',
+             'badge'=> $_sa_pending > 0 ? $_sa_pending : null,
+             'badge_title' => $_sa_pending > 0 ? $_sa_pending.' pending approval' : null],
+            ['href' => '/educore/modules/admin/centers.php?view=plans',
+             'icon' => 'star',      'label' => 'Plans',
+             'key'  => 'admin_plans'],
+            ['href' => '/educore/modules/admin/centers.php?view=password_requests',
+             'icon' => 'lock',      'label' => 'Password Requests',
+             'key'  => 'admin_passwords',
+             'badge'=> $_sa_resets > 0 ? $_sa_resets : null,
+             'badge_title' => $_sa_resets > 0 ? $_sa_resets.' pending' : null],
+            ['href' => '/educore/modules/admin/centers.php?view=notifications',
+             'icon' => 'bell',      'label' => 'Notifications',
+             'key'  => 'admin_notifications'],
+        ],
+        'admin_account' => [
+            ['href' => '/educore/modules/settings/security.php',
+             'icon' => 'shield',    'label' => 'Security',
+             'key'  => 'security'],
+        ],
+    ];
+
 } else {
+    // ── Center staff (owner, teacher, assistant, accountant) ─
     $navItems = [
         'main' => [
-            ['href' => '/educore/dashboard.php',          'icon' => 'grid',         'label' => 'Dashboard',   'key' => 'dashboard'],
-            ['href' => '/educore/modules/students/',      'icon' => 'users',        'label' => 'Students',    'key' => 'students'],
-            ['href' => '/educore/modules/groups/',        'icon' => 'layers',       'label' => 'Groups',      'key' => 'groups'],
-            ['href' => '/educore/modules/attendance/',    'icon' => 'check-square', 'label' => 'Attendance',  'key' => 'attendance'],
+            ['href' => '/educore/dashboard.php',          'icon' => 'grid',         'label' => 'Dashboard',  'key' => 'dashboard'],
+            ['href' => '/educore/modules/students/',      'icon' => 'users',        'label' => 'Students',   'key' => 'students'],
+            ['href' => '/educore/modules/groups/',        'icon' => 'layers',       'label' => 'Groups',     'key' => 'groups'],
+            ['href' => '/educore/modules/attendance/',    'icon' => 'check-square', 'label' => 'Attendance', 'key' => 'attendance'],
         ],
         'academic' => [
-            ['href' => '/educore/modules/exams/',         'icon' => 'file-text',    'label' => 'Exams',       'key' => 'exams'],
-            ['href' => '/educore/modules/videos/',        'icon' => 'play-circle',  'label' => 'Videos',      'key' => 'videos', 'feature' => 'videos'],
-            ['href' => '/educore/modules/payments/',      'icon' => 'dollar-sign',  'label' => 'Payments',    'key' => 'payments'],
-            ['href' => '/educore/modules/reports/',       'icon' => 'bar-chart-2',  'label' => 'Reports',     'key' => 'reports'],
+            ['href' => '/educore/modules/exams/',         'icon' => 'file-text',    'label' => 'Exams',      'key' => 'exams'],
+            ['href' => '/educore/modules/videos/',        'icon' => 'play-circle',  'label' => 'Videos',     'key' => 'videos', 'feature' => 'videos'],
+            ['href' => '/educore/modules/payments/',      'icon' => 'dollar-sign',  'label' => 'Payments',   'key' => 'payments'],
+            ['href' => '/educore/modules/reports/',       'icon' => 'bar-chart-2',  'label' => 'Reports',    'key' => 'reports'],
         ],
         'settings' => [
-            ['href' => '/educore/modules/settings/',      'icon' => 'settings',     'label' => 'Settings',    'key' => 'settings'],
+            ['href' => '/educore/modules/settings/',      'icon' => 'settings',     'label' => 'Settings',   'key' => 'settings'],
         ],
-    ];
-}
-
-// Super admin gets extra items
-if ($user['role'] === 'super_admin') {
-    $navItems['platform'] = [
-        ['href' => '/educore/modules/admin/centers.php',          'icon' => 'briefcase', 'label' => 'Centers',  'key' => 'admin_centers'],
-        ['href' => '/educore/modules/admin/centers.php?view=plans','icon' => 'star',      'label' => 'Plans',    'key' => 'admin_plans'],
     ];
 }
 
@@ -72,9 +103,11 @@ function navIcon($name) {
         'bar-chart-2' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
         'settings' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
         'briefcase' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+        'shield' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
         'star' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
         'user' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
         'bell' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+        'lock' => '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
         'menu' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
         'log-out' => '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
         'chevron-right' => '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>',
@@ -85,11 +118,12 @@ function navIcon($name) {
 }
 
 $sectionLabels = [
-    'main'     => 'Navigation',
-    'account'  => 'Account',
-    'academic' => 'Academic',
-    'settings' => 'System',
-    'platform' => 'Platform Admin',
+    'main'          => 'Navigation',
+    'account'       => 'Account',
+    'academic'      => 'Academic',
+    'settings'      => 'System',
+    'platform'      => 'Platform',
+    'admin_account' => 'Account',
 ];
 ?>
 <!DOCTYPE html>
@@ -116,7 +150,7 @@ $sectionLabels = [
 
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
-    <a href="/educore/dashboard.php" class="sidebar-brand">
+    <a href="<?= isRole('super_admin') ? '/educore/modules/admin/centers.php' : '/educore/dashboard.php' ?>" class="sidebar-brand">
       <div class="brand-icon">🎓</div>
       <span class="brand-text">Edu<span>Core</span></span>
     </a>
@@ -132,10 +166,28 @@ $sectionLabels = [
                 continue;
             }
           ?>
+          <?php
+            // Determine active state — also match view-based URLs for super admin
+            $isActive = ($activePage ?? '') === $item['key'];
+            if (!$isActive && isset($item['href'])) {
+                $currentUri = strtok($_SERVER['REQUEST_URI'] ?? '', '#');
+                $itemPath   = parse_url($item['href'], PHP_URL_PATH);
+                $itemQuery  = parse_url($item['href'], PHP_URL_QUERY) ?? '';
+                if ($itemPath && str_contains($currentUri, $itemPath)) {
+                    if (!$itemQuery || str_contains($_SERVER['QUERY_STRING'] ?? '', $itemQuery)) {
+                        $isActive = true;
+                    }
+                }
+            }
+          ?>
           <a href="<?= $item['href'] ?>"
-             class="nav-item <?= ($activePage ?? '') === $item['key'] ? 'active' : '' ?>">
+             class="nav-item <?= $isActive ? 'active' : '' ?>"
+             <?= !empty($item['badge_title']) ? 'title="'.htmlspecialchars($item['badge_title']).'"' : '' ?>>
             <span class="nav-icon"><?= navIcon($item['icon']) ?></span>
-            <?= $item['label'] ?>
+            <span style="flex:1;"><?= $item['label'] ?></span>
+            <?php if(!empty($item['badge'])): ?>
+            <span style="min-width:18px;height:18px;border-radius:9px;background:var(--danger);color:#fff;font-size:0.6rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 4px;flex-shrink:0;"><?= $item['badge'] ?></span>
+            <?php endif; ?>
           </a>
         <?php endforeach; ?>
       </div>
@@ -227,16 +279,29 @@ $sectionLabels = [
               <?php endif; ?>
             </div>
             <div class="notif-panel-body">
-              <?php $notifs=getUnreadNotifications(authId(),8);
-              if($notifs): foreach($notifs as $n): ?>
-              <div class="notif-item">
-                <div class="notif-item-title"><?=sanitize($n['title'])?></div>
-                <?php if($n['body']): ?><div class="notif-item-body"><?=sanitize($n['body'])?></div><?php endif; ?>
-                <div class="notif-item-time"><?=date('M j, g:i a',strtotime($n['created_at']))?></div>
-              </div>
+              <?php
+              $notifs=getUnreadNotifications(authId(),8);
+              $notifTypeIcons=['payment'=>'💳','attendance'=>'📋','exam'=>'📝','system'=>'⚙️','subscription'=>'💎','security'=>'🔐','info'=>'ℹ️','announcement'=>'📢','warning'=>'⚠️','success'=>'✅','billing'=>'💳','maintenance'=>'🔧','approval'=>'✅','rejection'=>'❌','password_reset'=>'🔐'];
+              if($notifs): foreach($notifs as $n):
+                $ico = $notifTypeIcons[$n['type']] ?? '🔔';
+                $tag = !empty($n['link']) ? 'a href="'.sanitize($n['link']).'"' : 'div';
+                $end = !empty($n['link']) ? 'a' : 'div';
+              ?>
+              <<?=$tag?> class="notif-item" style="text-decoration:none;display:flex;gap:10px;align-items:flex-start;">
+                <span style="font-size:1rem;flex-shrink:0;margin-top:1px;"><?=$ico?></span>
+                <div style="min-width:0;">
+                  <div class="notif-item-title"><?=sanitize($n['title'])?></div>
+                  <?php if($n['body']): ?><div class="notif-item-body" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?=sanitize($n['body'])?></div><?php endif; ?>
+                  <div class="notif-item-time"><?=date('M j, g:i a',strtotime($n['created_at']))?></div>
+                </div>
+              </<?=$end?>>
               <?php endforeach; else: ?>
               <div class="notif-empty">All caught up ✓</div>
               <?php endif; ?>
+            </div>
+            <div class="notif-panel-foot">
+              <?php $notifAllUrl = isRole('super_admin') ? '/educore/modules/admin/centers.php?view=password_requests' : '/educore/modules/settings/?tab=notifications'; ?>
+              <a href="<?=$notifAllUrl?>" onclick="document.getElementById('notifPanel').style.display='none';" style="font-size:0.78rem;color:var(--accent);text-decoration:none;font-weight:500;">View all notifications →</a>
             </div>
           </div>
         </div>
@@ -249,6 +314,9 @@ $sectionLabels = [
 
         <?php if(isRole('owner') && $user['center_id']): ?>
         <a href="/educore/modules/settings/" class="topbar-btn" title="Settings"><?=navIcon('settings')?></a>
+        <?php endif; ?>
+        <?php if(isRole('super_admin')): ?>
+        <a href="/educore/modules/settings/security.php" class="topbar-btn" title="Security"><?=navIcon('shield')?></a>
         <?php endif; ?>
 
         <!-- User avatar chip -->

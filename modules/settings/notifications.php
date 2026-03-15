@@ -28,7 +28,7 @@ $stmt = $pdo->prepare("SELECT * FROM notifications WHERE user_id=? ORDER BY crea
 $stmt->execute([$uid]);
 $allNotifs = $stmt->fetchAll();
 
-$typeIcons = ['payment'=>'💳','attendance'=>'📋','exam'=>'📝','system'=>'⚙️','subscription'=>'💎','security'=>'🔐','info'=>'ℹ️'];
+$typeIcons = ['payment'=>'💳','attendance'=>'📋','exam'=>'📝','system'=>'⚙️','subscription'=>'💎','security'=>'🔐','info'=>'ℹ️','announcement'=>'📢','warning'=>'⚠️','success'=>'✅','billing'=>'💳','maintenance'=>'🔧','approval'=>'✅','rejection'=>'❌','password_reset'=>'🔐'];
 
 include __DIR__ . '/../../templates/layout.php';
 ?>

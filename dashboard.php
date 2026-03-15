@@ -7,6 +7,11 @@ if (isRole('student')) {
     redirect('/educore/modules/students/home.php');
 }
 
+// Super admin redirects to platform admin panel
+if (isRole('super_admin')) {
+    redirect('/educore/modules/admin/centers.php');
+}
+
 $pageTitle  = 'Dashboard';
 $activePage = 'dashboard';
 
