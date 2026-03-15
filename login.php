@@ -331,7 +331,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <div class="form-group">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:7px;">
           <label class="form-label required" style="margin:0">Password</label>
-          <a href="/educore/forgot-password.php" class="forgot-link">Forgot password?</a>
+          <a href="/educore/forgot_password.php" class="forgot-link">Forgot password?</a>
         </div>
         <input type="password" name="password" class="form-control"
                placeholder="••••••••" required>
