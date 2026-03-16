@@ -50,13 +50,22 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     }
 }
 
-// Recent audit logs for this user/center
-$logsStmt = $pdo->prepare("
-    SELECT al.*, u.name AS user_name
-    FROM audit_logs al LEFT JOIN users u ON u.id=al.user_id
-    WHERE al.center_id=?
-    ORDER BY al.created_at DESC LIMIT 50");
-$logsStmt->execute([$cid]);
+// Recent audit logs — owners see all center activity; staff see only their own
+if (isRole('owner')) {
+    $logsStmt = $pdo->prepare("
+        SELECT al.*, u.name AS user_name
+        FROM audit_logs al LEFT JOIN users u ON u.id=al.user_id
+        WHERE al.center_id=?
+        ORDER BY al.created_at DESC LIMIT 50");
+    $logsStmt->execute([$cid]);
+} else {
+    $logsStmt = $pdo->prepare("
+        SELECT al.*, u.name AS user_name
+        FROM audit_logs al LEFT JOIN users u ON u.id=al.user_id
+        WHERE al.user_id=?
+        ORDER BY al.created_at DESC LIMIT 20");
+    $logsStmt->execute([$uid]);
+}
 $logs = $logsStmt->fetchAll();
 
 // Color map for action types
@@ -75,12 +84,18 @@ include __DIR__ . '/../../templates/layout.php';
   <div><h1 class="page-title">Security</h1><p class="page-subtitle">Password management and activity log</p></div>
 </div>
 
-<!-- Sub-nav -->
-<div style="display:flex;gap:4px;margin-bottom:24px;border-bottom:1px solid var(--border);">
+<!-- Sub-nav: owners get full tabs, staff only see Security -->
+<?php if (isRole('owner')): ?>
+<div style="display:flex;gap:4px;margin-bottom:24px;border-bottom:1px solid var(--border);overflow-x:auto;-webkit-overflow-scrolling:touch;">
   <?php foreach([['./','🏫','Profile'],['subscription.php','💳','Subscription'],['staff.php','👥','Staff'],['notifications.php','🔔','Notifications'],['security.php','🔐','Security']] as [$t,$i,$l]): ?>
-  <a href="<?=$t?>" style="display:flex;align-items:center;gap:6px;padding:10px 16px;font-size:0.84rem;font-weight:600;text-decoration:none;border-bottom:2px solid <?=str_contains($t,'security')?'var(--accent)':'transparent'?>;color:<?=str_contains($t,'security')?'var(--accent)':'var(--text-muted)'?>;margin-bottom:-1px;"><?=$i?> <?=$l?></a>
+  <a href="<?=$t?>" style="display:flex;align-items:center;gap:6px;padding:10px 16px;font-size:0.84rem;font-weight:600;text-decoration:none;border-bottom:2px solid <?=str_contains($t,'security')?'var(--accent)':'transparent'?>;color:<?=str_contains($t,'security')?'var(--accent)':'var(--text-muted)'?>;margin-bottom:-1px;white-space:nowrap;"><?=$i?> <?=$l?></a>
   <?php endforeach; ?>
 </div>
+<?php else: ?>
+<div style="margin-bottom:24px;padding:12px 16px;background:var(--accent-subtle);border:1px solid rgba(82,71,230,0.15);border-radius:var(--radius-md);font-size:0.83rem;color:var(--text-secondary);">
+  🔐 <strong style="color:var(--text-primary);">Account Security</strong> — Change your password below.
+</div>
+<?php endif; ?>
 
 <?php if($errors): ?>
 <div style="background:var(--danger-dim);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-md);padding:14px 18px;font-size:0.84rem;color:var(--danger);margin-bottom:20px;">
@@ -150,11 +165,10 @@ include __DIR__ . '/../../templates/layout.php';
 </div>
 
 <!-- Audit log -->
-<?php if(isRole('owner')): ?>
 <div class="card">
   <div class="card-header">
     <span class="card-title">Activity Log</span>
-    <span style="font-size:0.75rem;color:var(--text-muted);">Last 50 actions across your center</span>
+    <span style="font-size:0.75rem;color:var(--text-muted);"><?= isRole('owner') ? 'Last 50 actions across your center' : 'Your last 20 account actions' ?></span>
   </div>
   <div class="card-body no-padding">
     <?php if($logs): ?>
@@ -182,8 +196,6 @@ include __DIR__ . '/../../templates/layout.php';
     <?php endif; ?>
   </div>
 </div>
-<?php endif; ?>
-
 <script>
 // Password strength meter
 document.getElementById('newPwd')?.addEventListener('input', function() {

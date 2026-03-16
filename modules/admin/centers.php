@@ -11,6 +11,7 @@ $view        = $_GET['view'] ?? 'centers';
 $activePageMap = [
     'centers'           => 'admin_centers',
     'center_detail'     => 'admin_centers',
+    'registrations'     => 'admin_centers',
     'plans'             => 'admin_plans',
     'password_requests' => 'admin_passwords',
     'notifications'     => 'admin_notifications',
@@ -21,6 +22,7 @@ $activePage  = $activePageMap[$view] ?? 'admin_centers';
 $viewLabels = [
     'centers'           => 'Centers',
     'center_detail'     => 'Center Detail',
+    'registrations'     => 'Registrations',
     'plans'             => 'Plans',
     'password_requests' => 'Password Requests',
     'notifications'     => 'Notifications',
@@ -198,6 +200,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/educore/modules/admin/centers.php?view=plans');
     }
 
+    // ── Delete a center and ALL its data ────────────────────
+    if ($action === 'delete_center') {
+        $cid = (int)$_POST['center_id'];
+        $chk = $pdo->prepare("SELECT name FROM centers WHERE id=? LIMIT 1");
+        $chk->execute([$cid]);
+        $cName = $chk->fetchColumn();
+        if ($cName) {
+            $pdo->prepare("DELETE FROM centers WHERE id=?")->execute([$cid]);
+            auditLog('admin.center_deleted', 'center', $cid, ['name' => $cName]);
+            flash('success', 'Center "' . $cName . '" and all its data permanently deleted.');
+        } else {
+            flash('error', 'Center not found.');
+        }
+        redirect('/educore/modules/admin/centers.php');
+    }
+
+    // ── Delete a plan (only if not actively in use) ──────────
+    if ($action === 'delete_plan') {
+        $pid  = (int)$_POST['plan_id'];
+        $chk  = $pdo->prepare("SELECT COUNT(*) FROM subscriptions WHERE plan_id=? AND status IN('active','trial')");
+        $chk->execute([$pid]);
+        $inUse = (int)$chk->fetchColumn();
+        if ($inUse > 0) {
+            flash('error', 'Cannot delete — ' . $inUse . ' active/trial subscription' . ($inUse!==1?'s are':' is') . ' using this plan. Disable it instead.');
+        } else {
+            $nc = $pdo->prepare("SELECT name FROM plans WHERE id=? LIMIT 1");
+            $nc->execute([$pid]);
+            $pName = $nc->fetchColumn();
+            $pdo->prepare("UPDATE subscription_history SET to_plan=NULL WHERE to_plan=?")->execute([$pid]);
+            $pdo->prepare("UPDATE subscription_history SET from_plan=NULL WHERE from_plan=?")->execute([$pid]);
+            $pdo->prepare("DELETE FROM plans WHERE id=?")->execute([$pid]);
+            auditLog('admin.plan_deleted', 'plan', $pid, ['name' => $pName]);
+            flash('success', 'Plan "' . $pName . '" deleted.');
+        }
+        redirect('/educore/modules/admin/centers.php?view=plans');
+    }
+
+    // ── Delete a center and ALL its data ────────────────────
+    if ($action === 'delete_center') {
+        $cid = (int)$_POST['center_id'];
+        // Confirm center exists
+        $chk = $pdo->prepare("SELECT name FROM centers WHERE id=? LIMIT 1");
+        $chk->execute([$cid]);
+        $cName = $chk->fetchColumn();
+        if ($cName) {
+            // ON DELETE CASCADE handles all related data automatically
+            $pdo->prepare("DELETE FROM centers WHERE id=?")->execute([$cid]);
+            auditLog('admin.center_deleted', 'center', $cid, ['name' => $cName]);
+            flash('success', 'Center "' . $cName . '" and all its data have been permanently deleted.');
+        } else {
+            flash('error', 'Center not found.');
+        }
+        redirect('/educore/modules/admin/centers.php');
+    }
+
+    // ── Delete a plan (only if no active subscriptions use it) ──
+    if ($action === 'delete_plan') {
+        $pid = (int)$_POST['plan_id'];
+        $chk = $pdo->prepare("SELECT COUNT(*) FROM subscriptions WHERE plan_id=? AND status IN('active','trial')");
+        $chk->execute([$pid]);
+        $inUse = (int)$chk->fetchColumn();
+        if ($inUse > 0) {
+            flash('error', 'Cannot delete plan — ' . $inUse . ' active/trial subscription' . ($inUse!==1?'s are':' is') . ' using it. Disable it instead.');
+        } else {
+            $namChk = $pdo->prepare("SELECT name FROM plans WHERE id=? LIMIT 1");
+            $namChk->execute([$pid]);
+            $pName = $namChk->fetchColumn();
+            // Set NULL on history rows before deleting (FK is SET NULL)
+            $pdo->prepare("UPDATE subscription_history SET to_plan=NULL WHERE to_plan=?")->execute([$pid]);
+            $pdo->prepare("UPDATE subscription_history SET from_plan=NULL WHERE from_plan=?")->execute([$pid]);
+            $pdo->prepare("DELETE FROM plans WHERE id=?")->execute([$pid]);
+            auditLog('admin.plan_deleted', 'plan', $pid, ['name' => $pName]);
+            flash('success', 'Plan "' . $pName . '" deleted.');
+        }
+        redirect('/educore/modules/admin/centers.php?view=plans');
+    }
+
     // ── Password reset handling ──────────────────────────────
     if ($action === 'resolve_password_reset') {
         $reqId    = (int)$_POST['request_id'];
@@ -278,6 +357,71 @@ $stats = [
     'mrr'       => $pdo->query("SELECT COALESCE(SUM(p.price),0) FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.status='active'")->fetchColumn(),
     'expiring'  => $pdo->query("SELECT COUNT(*) FROM subscriptions WHERE status='active' AND expires_at BETWEEN NOW() AND DATE_ADD(NOW(),INTERVAL 7 DAY)")->fetchColumn(),
 ];
+
+// ── Load pending registrations with full submitted data ───────
+$pendingRegistrations = [];
+if ($view === 'registrations' || $stats['pending'] > 0) {
+    $regStmt = $pdo->prepare("
+        SELECT c.id, c.name, c.email, c.phone, c.address, c.status, c.created_at,
+               u.id AS owner_id, u.name AS owner_name, u.email AS owner_email, u.phone AS owner_phone,
+               p.name AS plan_name, p.slug AS plan_slug,
+               s.status AS sub_status, s.trial_ends_at
+        FROM centers c
+        LEFT JOIN users u ON u.center_id = c.id AND u.role = 'owner'
+        LEFT JOIN subscriptions s ON s.center_id = c.id
+            AND s.id = (SELECT MAX(id) FROM subscriptions WHERE center_id = c.id)
+        LEFT JOIN plans p ON p.id = s.plan_id
+        WHERE c.status = 'pending'
+        ORDER BY c.created_at DESC");
+    $regStmt->execute();
+    $pendingRegistrations = $regStmt->fetchAll();
+
+    // Attach branches to each pending registration
+    foreach ($pendingRegistrations as &$reg) {
+        try {
+            $brStmt = $pdo->prepare("SELECT name, address, phone FROM center_branches WHERE center_id = ? ORDER BY sort_order, id");
+            $brStmt->execute([$reg['id']]);
+            $reg['branches'] = $brStmt->fetchAll();
+        } catch (Exception $e) {
+            // Fallback: try JSON column on centers table
+            $reg['branches'] = [];
+            if (!empty($reg['branches_json'])) {
+                $reg['branches'] = json_decode($reg['branches_json'], true) ?? [];
+            }
+        }
+    }
+    unset($reg);
+}
+
+// ── Load pending registrations with full data ─────────────────
+$pendingRegistrations = [];
+if ($view === 'registrations' || $stats['pending'] > 0) {
+    $regStmt = $pdo->prepare("
+        SELECT c.id, c.name, c.email, c.phone, c.address, c.status, c.created_at,
+               u.id AS owner_id, u.name AS owner_name, u.email AS owner_email, u.phone AS owner_phone,
+               p.name AS plan_name, p.slug AS plan_slug,
+               s.status AS sub_status, s.trial_ends_at
+        FROM centers c
+        LEFT JOIN users u ON u.center_id = c.id AND u.role = 'owner'
+        LEFT JOIN subscriptions s ON s.center_id = c.id AND s.id = (SELECT MAX(id) FROM subscriptions WHERE center_id = c.id)
+        LEFT JOIN plans p ON p.id = s.plan_id
+        WHERE c.status = 'pending'
+        ORDER BY c.created_at DESC");
+    $regStmt->execute();
+    $pendingRegistrations = $regStmt->fetchAll();
+
+    // Attach branches to each pending registration
+    foreach ($pendingRegistrations as &$reg) {
+        try {
+            $brStmt = $pdo->prepare("SELECT name, address, phone FROM center_branches WHERE center_id = ? ORDER BY sort_order, id");
+            $brStmt->execute([$reg['id']]);
+            $reg['branches'] = $brStmt->fetchAll();
+        } catch (Exception $e) {
+            $reg['branches'] = [];
+        }
+    }
+    unset($reg);
+}
 
 $pendingResets = 0;
 try {
@@ -420,9 +564,24 @@ include __DIR__ . '/../../templates/layout.php';
     <h1 class="page-title">Super Admin</h1>
     <p class="page-subtitle">Platform-wide center, subscription &amp; notification control</p>
   </div>
-  <?php if ($view === 'plans'): ?>
-  <button class="btn btn-primary" onclick="openModal('planCreateModal')">+ New Plan</button>
-  <?php endif; ?>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <?php if ($view === 'plans'): ?>
+    <button class="btn btn-primary" onclick="openModal('planCreateModal')">+ New Plan</button>
+    <?php endif; ?>
+    <?php
+    // Check if current admin has 2FA enabled
+    $_sa2fa = $pdo->prepare("SELECT totp_enabled FROM users WHERE id=? LIMIT 1");
+    $_sa2fa->execute([authId()]);
+    $_sa2faRow = $_sa2fa->fetch();
+    ?>
+    <a href="/educore/totp_setup.php" class="btn btn-ghost btn-sm" title="Two-Factor Authentication">
+      <?php if (!empty($_sa2faRow['totp_enabled'])): ?>
+        <span style="color:var(--success);">🔐 2FA On</span>
+      <?php else: ?>
+        <span style="color:var(--warning);">⚠️ Enable 2FA</span>
+      <?php endif; ?>
+    </a>
+  </div>
 </div>
 
 <!-- Stats strip -->
@@ -450,6 +609,10 @@ include __DIR__ . '/../../templates/layout.php';
   <a href="?" class="sa-tab <?= $view==='centers'||$view==='center_detail'?'active':'' ?>">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
     Centers
+  </a>
+  <a href="?view=registrations" class="sa-tab <?= $view==='registrations'?'active':'' ?>">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+    Registrations
     <?php if($stats['pending']>0):?><span class="bdot"><?=$stats['pending']?></span><?php endif;?>
   </a>
   <a href="?view=plans" class="sa-tab <?= $view==='plans'?'active':'' ?>">
@@ -467,6 +630,153 @@ include __DIR__ . '/../../templates/layout.php';
     Send Notification
   </a>
 </div>
+
+
+<?php /* ═══════ REGISTRATIONS ═══════ */ ?>
+<?php if ($view === 'registrations'): ?>
+
+<style>
+.reg-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 22px 24px;
+  margin-bottom: 16px;
+  transition: box-shadow 0.15s;
+}
+.reg-card:hover { box-shadow: var(--shadow-md); }
+.reg-field { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.06em; }
+.reg-value { font-size: 0.88rem; color: var(--text-primary); font-weight: 500; }
+.reg-grid  { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 16px 0; padding: 14px 16px; background: var(--bg-elevated); border-radius: var(--radius-sm); }
+</style>
+
+<?php if (empty($pendingRegistrations)): ?>
+<div class="card">
+  <div class="card-body" style="text-align:center;padding:60px 20px;">
+    <div style="font-size:3rem;margin-bottom:14px;">✅</div>
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:6px;">No pending registrations</div>
+    <div style="font-size:0.84rem;color:var(--text-muted);">All registration requests have been reviewed.</div>
+  </div>
+</div>
+
+<?php else: ?>
+<div style="margin-bottom:16px;padding:13px 18px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius-md);font-size:0.83rem;display:flex;align-items:center;gap:10px;">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+  <span><strong><?= count($pendingRegistrations) ?> registration<?= count($pendingRegistrations) !== 1 ? 's' : '' ?></strong> waiting for your review. Each one shows all submitted data so you can make an informed decision.</span>
+</div>
+
+<?php foreach ($pendingRegistrations as $reg): ?>
+<div class="reg-card">
+
+  <!-- Header row -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
+    <div>
+      <div style="font-size:1.05rem;font-weight:700;color:var(--text-primary);margin-bottom:4px;">
+        <?= sanitize($reg['name']) ?>
+      </div>
+      <div style="font-size:0.76rem;color:var(--text-muted);">
+        Submitted <?= date('l, F j, Y \a\t g:i a', strtotime($reg['created_at'])) ?>
+        &nbsp;·&nbsp; <?= round((time() - strtotime($reg['created_at'])) / 3600, 1) ?> hours ago
+      </div>
+    </div>
+    <span class="badge badge-info" style="padding:5px 12px;font-size:0.72rem;">⏳ Pending Review</span>
+  </div>
+
+  <!-- All submitted data -->
+  <div class="reg-grid">
+    <div>
+      <div class="reg-field">Center Name</div>
+      <div class="reg-value"><?= sanitize($reg['name']) ?></div>
+    </div>
+    <div>
+      <div class="reg-field">Center Email</div>
+      <div class="reg-value"><?= sanitize($reg['email']) ?></div>
+    </div>
+    <div>
+      <div class="reg-field">Center Phone</div>
+      <div class="reg-value"><?= sanitize($reg['phone'] ?: '—') ?></div>
+    </div>
+    <div>
+      <div class="reg-field">Address</div>
+      <div class="reg-value"><?= sanitize($reg['address'] ?: '—') ?></div>
+    </div>
+    <div>
+      <div class="reg-field">Owner Name</div>
+      <div class="reg-value"><?= sanitize($reg['owner_name'] ?? '—') ?></div>
+    </div>
+    <div>
+      <div class="reg-field">Owner Email</div>
+      <div class="reg-value"><?= sanitize($reg['owner_email'] ?? $reg['email']) ?></div>
+    </div>
+    <div>
+      <div class="reg-field">Owner Phone</div>
+      <div class="reg-value"><?= sanitize($reg['owner_phone'] ?? '—') ?></div>
+    </div>
+    <div>
+      <div class="reg-field">Requested Plan</div>
+      <div class="reg-value"><?= sanitize($reg['plan_name'] ?? 'Individual') ?></div>
+    </div>
+  </div>
+
+  <!-- Branches -->
+  <?php if (!empty($reg['branches'])): ?>
+  <div style="margin-top:4px;">
+    <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:8px;">
+      📍 Branches (<?= count($reg['branches']) ?>)
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
+      <?php foreach ($reg['branches'] as $bi => $br): ?>
+      <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;">
+        <div style="font-size:0.82rem;font-weight:600;color:var(--text-primary);margin-bottom:3px;">
+          <?= sanitize($br['name']) ?>
+        </div>
+        <?php if (!empty($br['address'])): ?>
+        <div style="font-size:0.74rem;color:var(--text-muted);">📍 <?= sanitize($br['address']) ?></div>
+        <?php endif; ?>
+        <?php if (!empty($br['phone'])): ?>
+        <div style="font-size:0.74rem;color:var(--text-muted);">📞 <?= sanitize($br['phone']) ?></div>
+        <?php endif; ?>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+  <?php endif; ?>
+
+  <!-- Action buttons -->
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+    <!-- Approve -->
+    <form method="POST" style="display:inline;" onsubmit="return confirm('Approve <?= addslashes(sanitize($reg['name'])) ?>? Their 14-day trial will start immediately.')">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="approve_center">
+      <input type="hidden" name="center_id" value="<?= $reg['id'] ?>">
+      <button type="submit" class="btn btn-success" style="gap:8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        Approve &amp; Start Trial
+      </button>
+    </form>
+
+    <!-- Reject -->
+    <button class="btn btn-danger" onclick="openRejectModal(<?= $reg['id'] ?>,'<?= addslashes(sanitize($reg['name'])) ?>')" style="gap:8px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      Reject
+    </button>
+
+    <!-- Assign custom plan before approving -->
+    <button class="btn btn-ghost" onclick="openPlanModal(<?= $reg['id'] ?>,'<?= addslashes(sanitize($reg['name'])) ?>')" style="font-size:0.8rem;">
+      Assign Plan &amp; Activate
+    </button>
+
+    <span style="font-size:0.74rem;color:var(--text-muted);margin-left:4px;">
+      ID #<?= $reg['id'] ?>
+    </span>
+  </div>
+
+</div>
+<?php endforeach; ?>
+<?php endif; ?>
+
+<?php endif; /* end registrations view */ ?>
 
 
 <?php /* ═══════ CENTERS ═══════ */ ?>
@@ -550,10 +860,13 @@ include __DIR__ . '/../../templates/layout.php';
         <?php if($c['status']==='pending'): ?>
           <form method="POST" style="display:inline;"><?=csrf_field()?><input type="hidden" name="action" value="approve_center"><input type="hidden" name="center_id" value="<?=$c['id']?>"><button class="btn btn-sm btn-success" type="submit">✓ Approve</button></form>
           <button class="btn btn-sm btn-danger" onclick="openRejectModal(<?=$c['id']?>,'<?=addslashes(sanitize($c['name']))?>')">✕ Reject</button>
+          <button class="btn btn-sm btn-danger" style="opacity:.7;" onclick="openDeleteCenterModal(<?=$c['id']?>,'<?=addslashes(sanitize($c['name']))?>')">🗑</button>
         <?php else: ?>
+          <a href="?view=center_detail&id=<?=$c['id']?>" class="btn btn-ghost btn-sm">Detail</a>
           <button class="btn btn-ghost btn-sm" onclick="openPlanModal(<?=$c['id']?>,'<?=addslashes(sanitize($c['name']))?>')">Sub</button>
           <button class="btn btn-ghost btn-sm" onclick="openStatusModal(<?=$c['id']?>,'<?=addslashes(sanitize($c['name']))?>','<?=$c['status']?>')">Status</button>
           <button class="btn btn-ghost btn-sm" title="Send notification" onclick="openQuickNotif(<?=$c['id']?>,'<?=addslashes(sanitize($c['name']))?>')">📢</button>
+          <button class="btn btn-sm btn-danger" style="opacity:.7;" onclick="openDeleteCenterModal(<?=$c['id']?>,'<?=addslashes(sanitize($c['name']))?>')">🗑</button>
         <?php endif; ?>
       </div>
     </div>
@@ -594,6 +907,7 @@ include __DIR__ . '/../../templates/layout.php';
     <button class="btn btn-ghost btn-sm" onclick="openPlanModal(<?=$centerDetail['id']?>,'<?=addslashes(sanitize($centerDetail['name']))?>')">Manage Sub</button>
     <button class="btn btn-ghost btn-sm" onclick="openStatusModal(<?=$centerDetail['id']?>,'<?=addslashes(sanitize($centerDetail['name']))?>','<?=$centerDetail['status']?>')">Change Status</button>
     <button class="btn btn-primary btn-sm" onclick="openQuickNotif(<?=$centerDetail['id']?>,'<?=addslashes(sanitize($centerDetail['name']))?>')">📢 Notify</button>
+    <button class="btn btn-danger btn-sm" onclick="openDeleteCenterModal(<?=$centerDetail['id']?>,'<?=addslashes(sanitize($centerDetail['name']))?>')">🗑 Delete Center</button>
   </div>
 </div>
 
@@ -701,6 +1015,7 @@ include __DIR__ . '/../../templates/layout.php';
     <div style="display:flex;gap:6px;">
       <a href="?view=plans&edit=<?=$p['id']?>" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;">Edit</a>
       <form method="POST" style="flex:1;"><?=csrf_field()?><input type="hidden" name="action" value="toggle_plan"><input type="hidden" name="plan_id" value="<?=$p['id']?>"><button type="submit" class="btn btn-sm <?=$p['is_active']?'btn-danger':'btn-success'?>" style="width:100%;"><?=$p['is_active']?'Disable':'Enable'?></button></form>
+      <button class="btn btn-danger btn-sm" style="padding:6px 10px;opacity:.75;" onclick="openDeletePlanModal(<?=$p['id']?>,<?=(int)$p['sub_count']?>,'<?=addslashes(sanitize($p['name']))?>')" title="Delete plan">🗑</button>
     </div>
   </div>
 </div>
@@ -1199,4 +1514,101 @@ function onPlanTypeChange(type) {
 })();
 </script>
 
+
+<!-- ── Delete Center Modal ──────────────────────────────── -->
+<div class="modal-backdrop" id="deleteCenterModal">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header" style="border-top:3px solid var(--danger);">
+      <span class="modal-title" style="color:var(--danger);">🗑 Delete Center</span>
+      <button class="modal-close" onclick="closeModal('deleteCenterModal')">✕</button>
+    </div>
+    <form method="POST">
+      <div class="modal-body">
+        <?=csrf_field()?>
+        <input type="hidden" name="action" value="delete_center">
+        <input type="hidden" name="center_id" id="dcCenterId">
+        <div style="background:var(--danger-dim);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-md);padding:16px 18px;margin-bottom:16px;">
+          <div style="font-weight:700;color:var(--danger);margin-bottom:8px;font-size:0.9rem;">⚠️ This action is permanent and cannot be undone.</div>
+          <div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.7;">
+            Deleting <strong id="dcCenterName" style="color:var(--text-primary);"></strong> will permanently remove:
+          </div>
+          <ul style="font-size:0.8rem;color:var(--text-secondary);margin:8px 0 0 16px;line-height:2;">
+            <li>All students and their data</li>
+            <li>All groups, attendance sessions and records</li>
+            <li>All exams, submissions and results</li>
+            <li>All payments and receipts</li>
+            <li>All staff accounts (teachers, assistants, accountants)</li>
+            <li>All videos, playlists and comments</li>
+            <li>Subscription history</li>
+          </ul>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label required">Type the center name to confirm</label>
+          <input type="text" id="dcConfirmName" class="form-control"
+                 placeholder="Type exact center name here" autocomplete="off">
+          <span class="form-hint">Must match exactly: <strong id="dcNameHint" style="color:var(--text-primary);"></strong></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('deleteCenterModal')">Cancel</button>
+        <button type="submit" class="btn btn-danger" id="dcSubmitBtn" disabled>Delete Permanently</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Delete Plan Modal ─────────────────────────────────── -->
+<div class="modal-backdrop" id="deletePlanModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header" style="border-top:3px solid var(--danger);">
+      <span class="modal-title" style="color:var(--danger);">🗑 Delete Plan</span>
+      <button class="modal-close" onclick="closeModal('deletePlanModal')">✕</button>
+    </div>
+    <form method="POST">
+      <div class="modal-body">
+        <?=csrf_field()?>
+        <input type="hidden" name="action" value="delete_plan">
+        <input type="hidden" name="plan_id" id="dpPlanId">
+        <p style="font-size:0.86rem;color:var(--text-secondary);margin-bottom:14px;line-height:1.7;">
+          You are about to delete plan <strong id="dpPlanName" style="color:var(--text-primary);"></strong>.
+        </p>
+        <div id="dpActiveWarn" style="display:none;background:var(--danger-dim);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:12px 14px;font-size:0.82rem;color:var(--danger);margin-bottom:14px;">
+          This plan has active/trial subscriptions. You must wait for them to expire or reassign those centers before deleting.
+        </div>
+        <div id="dpSafeMsg" style="display:none;background:var(--success-dim);border:1px solid rgba(16,185,129,0.2);border-radius:var(--radius-sm);padding:12px 14px;font-size:0.82rem;color:var(--success);">
+          ✓ No active subscriptions use this plan. Safe to delete.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('deletePlanModal')">Cancel</button>
+        <button type="submit" class="btn btn-danger" id="dpSubmitBtn">Delete Plan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openDeleteCenterModal(id, name) {
+  document.getElementById('dcCenterId').value   = id;
+  document.getElementById('dcCenterName').textContent = name;
+  document.getElementById('dcNameHint').textContent   = name;
+  document.getElementById('dcConfirmName').value      = '';
+  document.getElementById('dcSubmitBtn').disabled     = true;
+  openModal('deleteCenterModal');
+  // Enable submit only when typed name matches exactly
+  document.getElementById('dcConfirmName').oninput = function() {
+    document.getElementById('dcSubmitBtn').disabled = (this.value.trim() !== name.trim());
+  };
+}
+
+function openDeletePlanModal(id, subCount, name) {
+  document.getElementById('dpPlanId').value = id;
+  document.getElementById('dpPlanName').textContent = name;
+  const hasActive = subCount > 0;
+  document.getElementById('dpActiveWarn').style.display = hasActive ? '' : 'none';
+  document.getElementById('dpSafeMsg').style.display    = hasActive ? 'none' : '';
+  document.getElementById('dpSubmitBtn').disabled       = hasActive;
+  openModal('deletePlanModal');
+}
+</script>
 <?php include __DIR__ . '/../../templates/layout_end.php'; ?>

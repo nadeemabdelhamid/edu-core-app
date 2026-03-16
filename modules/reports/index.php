@@ -335,7 +335,7 @@ const accent = '#f5a623';
 
 // Shared chart defaults
 Chart.defaults.color = '#8892a4';
-Chart.defaults.font.family = "'Nunito', sans-serif";
+Chart.defaults.font.family = "'Geist', sans-serif";
 Chart.defaults.plugins.legend.display = false;
 
 const gridColor = 'rgba(255,255,255,0.05)';

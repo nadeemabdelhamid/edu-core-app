@@ -88,6 +88,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('success','Invitation cancelled.');
         redirect('/educore/modules/settings/staff.php');
     }
+
+    // ── Delete a staff account permanently ───────────────────
+    if ($action === 'delete_staff') {
+        $uid_del = (int)$_POST['user_id'];
+        // Safety: never delete the owner, and only delete within this center
+        $chk = $pdo->prepare("SELECT name, role FROM users WHERE id=? AND center_id=? AND role!='owner' LIMIT 1");
+        $chk->execute([$uid_del, $cid]);
+        $staffRow = $chk->fetch();
+        if (!$staffRow) {
+            flash('error', 'Staff member not found or cannot be deleted.');
+        } else {
+            $staffName = $staffRow['name'];
+            $staffRole = $staffRow['role'];
+            // Unassign from groups (teacher_id → NULL via FK SET NULL, or explicit)
+            $pdo->prepare("UPDATE `groups` SET teacher_id=NULL WHERE teacher_id=? AND center_id=".(int)$cid)->execute([$uid_del]);
+            // Remove teacher-student assignments
+            $pdo->prepare("DELETE FROM student_teachers WHERE teacher_id=? AND center_id=".(int)$cid)->execute([$uid_del]);
+            // Delete the user account
+            $pdo->prepare("DELETE FROM users WHERE id=? AND center_id=? AND role!='owner'")->execute([$uid_del, $cid]);
+            auditLog('staff.deleted', 'user', $uid_del, ['name' => $staffName, 'role' => $staffRole]);
+            flash('success', $staffName . ' (' . ucfirst($staffRole) . ') has been permanently deleted.');
+        }
+        redirect('/educore/modules/settings/staff.php');
+    }
 }
 
 // Load staff
@@ -188,12 +212,15 @@ include __DIR__ . '/../../templates/layout.php';
           <td style="font-size:0.77rem;color:var(--text-muted);"><?=$s['last_login']?date('M j, g:i a',strtotime($s['last_login'])):'Never'?></td>
           <td style="text-align:right;">
             <?php if($s['role']!=='owner'): ?>
-            <form method="POST" style="display:inline;">
-              <?=csrf_field()?><input type="hidden" name="action" value="toggle_active"><input type="hidden" name="user_id" value="<?=$s['id']?>">
-              <button type="submit" class="btn btn-sm <?=$s['is_active']?'btn-danger':'btn-success'?>" style="font-size:0.72rem;">
-                <?=$s['is_active']?'Suspend':'Activate'?>
-              </button>
-            </form>
+            <div style="display:flex;gap:5px;justify-content:flex-end;align-items:center;">
+              <form method="POST" style="display:inline;">
+                <?=csrf_field()?><input type="hidden" name="action" value="toggle_active"><input type="hidden" name="user_id" value="<?=$s['id']?>">
+                <button type="submit" class="btn btn-sm <?=$s['is_active']?'btn-danger':'btn-success'?>" style="font-size:0.72rem;">
+                  <?=$s['is_active']?'Suspend':'Activate'?>
+                </button>
+              </form>
+              <button class="btn btn-danger btn-sm" style="font-size:0.72rem;padding:4px 8px;" onclick="openDeleteStaffModal(<?=$s['id']?>,'<?=addslashes(sanitize($s['name']))?>','<?=$s['role']?>')" title="Delete account">🗑</button>
+            </div>
             <?php endif; ?>
           </td>
         </tr>
@@ -294,4 +321,44 @@ include __DIR__ . '/../../templates/layout.php';
 </div>
 </div>
 
+
+<!-- Delete Staff Modal -->
+<div class="modal-backdrop" id="deleteStaffModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header" style="border-top:3px solid var(--danger);">
+      <span class="modal-title" style="color:var(--danger);">🗑 Delete Staff Account</span>
+      <button class="modal-close" onclick="closeModal('deleteStaffModal')">✕</button>
+    </div>
+    <form method="POST">
+      <div class="modal-body">
+        <?=csrf_field()?>
+        <input type="hidden" name="action" value="delete_staff">
+        <input type="hidden" name="user_id" id="dsUserId">
+        <div style="background:var(--danger-dim);border:1px solid rgba(239,68,68,0.2);border-radius:var(--radius-md);padding:14px 16px;margin-bottom:14px;">
+          <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.7;margin:0;">
+            Permanently delete <strong id="dsUserName" style="color:var(--text-primary);"></strong>
+            (<span id="dsUserRole" style="color:var(--accent);"></span>)?
+          </p>
+          <p style="font-size:0.8rem;color:var(--text-muted);margin:8px 0 0;line-height:1.7;">
+            Their account will be removed. Any groups they manage will be unassigned.
+            Student data and attendance records are <strong>not</strong> deleted.
+          </p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('deleteStaffModal')">Cancel</button>
+        <button type="submit" class="btn btn-danger">Delete Account</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openDeleteStaffModal(id, name, role) {
+  document.getElementById('dsUserId').value = id;
+  document.getElementById('dsUserName').textContent = name;
+  document.getElementById('dsUserRole').textContent = role.charAt(0).toUpperCase() + role.slice(1);
+  openModal('deleteStaffModal');
+}
+</script>
 <?php include __DIR__ . '/../../templates/layout_end.php'; ?>

@@ -1,5 +1,9 @@
 <?php
 require_once __DIR__ . '/../../includes/helpers.php';
+// Teachers, assistants, accountants go straight to their password/security page
+if (isRole('teacher', 'assistant', 'accountant')) {
+    redirect('/educore/modules/settings/security.php');
+}
 requireRole('owner');
 
 $pdo = getDB();

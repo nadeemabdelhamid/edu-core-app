@@ -65,6 +65,9 @@ if ($user['role'] === 'student') {
              'key'  => 'admin_notifications'],
         ],
         'admin_account' => [
+            ['href' => '/educore/totp_setup.php',
+             'icon' => 'lock',      'label' => '2FA Setup',
+             'key'  => '2fa_setup'],
             ['href' => '/educore/modules/settings/security.php',
              'icon' => 'shield',    'label' => 'Security',
              'key'  => 'security'],
@@ -339,7 +342,7 @@ $sectionLabels = [
           <?php if(isRole('owner') && $user['center_id']): ?>
           <a href="/educore/modules/settings/" class="tum-item"><?= navIcon('settings') ?> Settings</a>
           <?php endif; ?>
-          <a href="/educore/modules/settings/security.php" class="tum-item"><?= navIcon('user') ?> Profile</a>
+          <a href="/educore/modules/settings/security.php" class="tum-item"><?= navIcon('user') ?> <?= isRole('owner') ? 'Profile' : 'Security' ?></a>
           <div class="tum-divider"></div>
           <a href="/educore/logout.php" class="tum-item tum-item-danger"><?= navIcon('log-out') ?> Sign out</a>
         </div>

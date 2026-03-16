@@ -45,6 +45,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($centerStatus === 'pending' && $user['role'] !== 'super_admin') {
                 $errors[] = 'Your account is pending approval by our team. You will be notified once approved.';
             } else {
+                // Super admin: require TOTP if enabled
+                if ($user['role'] === 'super_admin') {
+                    $hasTOTP = !empty($user['totp_enabled']) && !empty($user['totp_secret']);
+                    if ($hasTOTP) {
+                        // Park user in session, redirect to TOTP page
+                        session_regenerate_id(true);
+                        $_SESSION['2fa_pending']  = true;
+                        $_SESSION['2fa_user_id']  = $user['id'];
+                        $_SESSION['2fa_user_name'] = $user['name'];
+                        header('Location: /educore/totp_verify.php');
+                        exit;
+                    }
+                }
                 login($user);
                 flash('success', 'Welcome back, ' . $user['name'] . '!');
                 header('Location: /educore/dashboard.php');
@@ -61,10 +74,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign In — EduCore</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
+  <title>Sign In — EduCore</title>  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/educore/assets/css/app.css">
   <style>
     body {
