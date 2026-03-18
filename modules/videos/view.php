@@ -130,7 +130,7 @@ if ($resumeAt > 0) {
         <span style="font-size:0.78rem;color:var(--text-muted);">
           By <?= sanitize($video['creator_name']) ?> · <?= date('M j, Y', strtotime($video['created_at'])) ?>
         </span>
-        <?php if (!isRole('student') && hasFeature('video_analytics')): ?>
+        <?php if (!isRole('student') && hasFeature('videos')): ?>
           <span style="font-size:0.78rem;color:var(--text-muted);">
             · 👁 <?= (int)$video['total_views'] ?> students watched
           </span>
@@ -153,7 +153,7 @@ if ($resumeAt > 0) {
     <?php if (!isRole('student') && (isRole('owner') || $video['created_by'] == $uid)): ?>
     <div style="display:flex;flex-direction:column;gap:8px;min-width:140px;">
       <a href="edit.php?id=<?= $id ?>" class="btn btn-ghost btn-sm">✏️ Edit</a>
-      <?php if (hasFeature('video_analytics')): ?>
+      <?php if (hasFeature('videos')): ?>
       <a href="analytics.php?id=<?= $id ?>" class="btn btn-ghost btn-sm">📊 Analytics</a>
       <?php endif; ?>
       <form method="POST" action="delete.php" onsubmit="return confirm('Delete this video?')">

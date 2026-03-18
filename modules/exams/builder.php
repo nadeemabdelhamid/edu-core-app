@@ -446,6 +446,9 @@ function updateTypeUI(type) {
   document.getElementById('mcqOptions').style.display      = type==='mcq' ? '' : 'none';
   document.getElementById('tfOptions').style.display       = type==='true_false' ? '' : 'none';
   document.getElementById('multiSelectWrap').style.display = type==='mcq' ? '' : 'none';
+  // Disable inactive selects so only the active one submits with the form
+  document.getElementById('correctMcq').disabled = (type !== 'mcq');
+  document.getElementById('correctTf').disabled  = (type !== 'true_false');
   const isMSChecked = document.getElementById('isMultiSelect')?.checked;
   if(document.getElementById('multiCorrectWrap'))
     document.getElementById('multiCorrectWrap').style.display = (type==='mcq'&&isMSChecked) ? '' : 'none';
@@ -502,6 +505,9 @@ function cancelEdit() {
   document.getElementById('imageDropZone').style.display = '';
   updateTypeUI('mcq');
 }
+
+// Initialize correct-answer fields on page load
+updateTypeUI(document.getElementById('qType').value || 'mcq');
 
 function previewNewImage(input) {
   if (input.files && input.files[0]) {

@@ -312,6 +312,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/educore/modules/admin/centers.php?view=password_requests');
     }
 
+    // ── Plan change request: approve ──────────────────────
+    if ($action === 'approve_plan_request') {
+        $reqId     = (int)$_POST['request_id'];
+        $adminNote = trim($_POST['admin_note'] ?? '');
+        $req = $pdo->prepare("SELECT pcr.*,pto.name AS to_plan_name,pto.id AS to_plan_id,c.name AS center_name FROM plan_change_requests pcr JOIN plans pto ON pto.id=pcr.to_plan_id JOIN centers c ON c.id=pcr.center_id WHERE pcr.id=? AND pcr.status='pending' LIMIT 1");
+        $req->execute([$reqId]);
+        $planReq = $req->fetch();
+        if ($planReq) {
+            $pdo->prepare("UPDATE subscriptions SET plan_id=?,status='active',expires_at=DATE_ADD(NOW(),INTERVAL 30 DAY),updated_at=NOW() WHERE center_id=? ORDER BY id DESC LIMIT 1")
+                ->execute([$planReq['to_plan_id'],$planReq['center_id']]);
+            $pdo->prepare("INSERT INTO subscription_history (center_id,from_plan,to_plan,changed_by,reason) VALUES (?,?,?,?,'Admin approved plan request')")
+                ->execute([$planReq['center_id'],$planReq['from_plan_id'],$planReq['to_plan_id'],authId()]);
+            $pdo->prepare("UPDATE plan_change_requests SET status='approved',admin_note=?,resolved_by=?,resolved_at=NOW() WHERE id=?")
+                ->execute([$adminNote,authId(),$reqId]);
+            $owner = $pdo->prepare("SELECT id FROM users WHERE center_id=? AND role='owner' LIMIT 1");
+            $owner->execute([$planReq['center_id']]);
+            if ($ownerRow = $owner->fetch()) {
+                $msg = "Your request to switch to {$planReq['to_plan_name']} has been approved and is now active.";
+                if ($adminNote) $msg .= " Admin note: $adminNote";
+                pushNotification($ownerRow['id'],'approval','Plan Change Approved',$msg,'/educore/modules/settings/subscription.php',$planReq['center_id']);
+            }
+            auditLog('admin.plan_request_approved','plan_change_request',$reqId,['center'=>$planReq['center_name'],'to_plan'=>$planReq['to_plan_name']]);
+            flash('success',"Plan changed to {$planReq['to_plan_name']} for {$planReq['center_name']}. Owner notified.");
+        } else { flash('error','Request not found or already resolved.'); }
+        redirect('/educore/modules/admin/centers.php?view=plan_requests');
+    }
+
+    // ── Plan change request: reject ───────────────────────
+    if ($action === 'reject_plan_request') {
+        $reqId     = (int)$_POST['request_id'];
+        $adminNote = trim($_POST['admin_note'] ?? '');
+        $req = $pdo->prepare("SELECT pcr.*,pto.name AS to_plan_name,c.name AS center_name FROM plan_change_requests pcr JOIN plans pto ON pto.id=pcr.to_plan_id JOIN centers c ON c.id=pcr.center_id WHERE pcr.id=? AND pcr.status='pending' LIMIT 1");
+        $req->execute([$reqId]);
+        $planReq = $req->fetch();
+        if ($planReq) {
+            $pdo->prepare("UPDATE plan_change_requests SET status='rejected',admin_note=?,resolved_by=?,resolved_at=NOW() WHERE id=?")
+                ->execute([$adminNote,authId(),$reqId]);
+            $owner = $pdo->prepare("SELECT id FROM users WHERE center_id=? AND role='owner' LIMIT 1");
+            $owner->execute([$planReq['center_id']]);
+            if ($ownerRow = $owner->fetch()) {
+                $msg = "Your request to switch to {$planReq['to_plan_name']} was not approved.";
+                if ($adminNote) $msg .= " Reason: $adminNote";
+                pushNotification($ownerRow['id'],'rejection','Plan Change Request Declined',$msg,'/educore/modules/settings/subscription.php',$planReq['center_id']);
+            }
+            auditLog('admin.plan_request_rejected','plan_change_request',$reqId,['center'=>$planReq['center_name'],'to_plan'=>$planReq['to_plan_name']]);
+            flash('success',"Request declined. {$planReq['center_name']} has been notified.");
+        } else { flash('error','Request not found or already resolved.'); }
+        redirect('/educore/modules/admin/centers.php?view=plan_requests');
+    }
+
     // ── Send notification ────────────────────────────────────
     if ($action === 'send_notification') {
         $targetType = $_POST['target_type'] ?? 'center';
@@ -503,6 +553,36 @@ if ($view === 'password_requests') {
 }
 
 // ── Centers for notification selector ───────────────────────
+// ── Plan change requests ─────────────────────────────────────────────
+$planRequests         = [];
+$resolvedPlanRequests = [];
+$pendingPlanCount     = 0;
+if ($view === 'plan_requests') {
+    try {
+        $planRequests = $pdo->query("
+            SELECT pcr.*, c.name AS center_name, u.name AS owner_name,
+                   pfrom.name AS from_plan_name, pto.name AS to_plan_name, pto.id AS to_plan_id
+            FROM plan_change_requests pcr
+            JOIN centers c ON c.id=pcr.center_id
+            LEFT JOIN users u ON u.id=pcr.user_id
+            LEFT JOIN plans pfrom ON pfrom.id=pcr.from_plan_id
+            JOIN plans pto ON pto.id=pcr.to_plan_id
+            WHERE pcr.status='pending' ORDER BY pcr.requested_at DESC")->fetchAll();
+
+        $resolvedPlanRequests = $pdo->query("
+            SELECT pcr.*, c.name AS center_name, u.name AS owner_name,
+                   pfrom.name AS from_plan_name, pto.name AS to_plan_name, a.name AS resolved_by_name
+            FROM plan_change_requests pcr
+            JOIN centers c ON c.id=pcr.center_id
+            LEFT JOIN users u ON u.id=pcr.user_id
+            LEFT JOIN plans pfrom ON pfrom.id=pcr.from_plan_id
+            JOIN plans pto ON pto.id=pcr.to_plan_id
+            LEFT JOIN users a ON a.id=pcr.resolved_by
+            WHERE pcr.status!='pending' ORDER BY pcr.resolved_at DESC LIMIT 30")->fetchAll();
+    } catch (Exception $e) {}
+}
+try { $pendingPlanCount=(int)$pdo->query("SELECT COUNT(*) FROM plan_change_requests WHERE status='pending'")->fetchColumn(); } catch(Exception $e){}
+
 $allCenters = $pdo->query("SELECT id, name FROM centers WHERE status != 'suspended' ORDER BY name")->fetchAll();
 
 $statusBadge = ['active'=>'badge-success','trial'=>'badge-warning','suspended'=>'badge-danger','pending'=>'badge-info'];
@@ -594,7 +674,7 @@ include __DIR__ . '/../../templates/layout.php';
     ['v'=>$stats['pending'],  'l'=>'Pending',      'c'=>$stats['pending']>0?'#f59e0b':'var(--text-muted)', 'href'=>'?status=pending'],
     ['v'=>$stats['suspended'],'l'=>'Suspended',    'c'=>'var(--danger)',       'href'=>'?status=suspended'],
     ['v'=>$stats['expiring'], 'l'=>'Expiring 7d',  'c'=>$stats['expiring']>0?'#ef4444':'var(--text-muted)', 'href'=>'?status=active'],
-    ['v'=>'$'.number_format($stats['mrr'],0),'l'=>'Active MRR','c'=>'var(--success)','href'=>'?view=plans'],
+    ['v'=>number_format($stats['mrr'],0).' EGP','l'=>'Active MRR','c'=>'var(--success)','href'=>'?view=plans'],
   ];
   foreach ($strip as $s): ?>
   <a href="<?= $s['href'] ?>" style="background:var(--bg-card);display:block;text-decoration:none;text-align:center;padding:14px 8px;">
@@ -624,6 +704,11 @@ include __DIR__ . '/../../templates/layout.php';
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
     Password Requests
     <?php if($pendingResets>0):?><span class="bdot"><?=$pendingResets?></span><?php endif;?>
+  </a>
+  <a href="?view=plan_requests" class="sa-tab <?= $view==='plan_requests'?'active':'' ?>">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+    Plan Requests
+    <?php if($pendingPlanCount>0):?><span class="bdot"><?=$pendingPlanCount?></span><?php endif;?>
   </a>
   <a href="?view=notifications" class="sa-tab <?= $view==='notifications'?'active':'' ?>">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -846,7 +931,7 @@ include __DIR__ . '/../../templates/layout.php';
       </div>
       <div style="font-size:0.79rem;">
         <?php if($c['plan_name']): ?>
-          <div style="font-weight:600;color:var(--text-primary);"><?=sanitize($c['plan_name'])?><?=$c['plan_price']>0?' <span style="font-weight:400;color:var(--text-muted);">($'.number_format($c['plan_price'],0).'/mo)</span>':''?></div>
+          <div style="font-weight:600;color:var(--text-primary);"><?=sanitize($c['plan_name'])?><?=$c['plan_price']>0?' <span style="font-weight:400;color:var(--text-muted);">('.number_format($c['plan_price'],0).' EGP/mo)</span>':''?></div>
           <?php if($exText): ?><div class="sub-expiry <?=$exClass?>" style="font-size:0.7rem;margin-top:2px;"><?=$exText?></div><?php endif;?>
         <?php else: ?>
           <div style="color:var(--text-muted);">No plan</div>
@@ -856,7 +941,6 @@ include __DIR__ . '/../../templates/layout.php';
         <?php if($c['sub_status']&&$c['sub_status']!==$c['status']):?><div style="font-size:0.68rem;color:var(--text-muted);margin-top:4px;">Sub: <?=ucfirst($c['sub_status'])?></div><?php endif;?>
       </div>
       <div class="act-btns">
-        <a href="?view=center_detail&id=<?=$c['id']?>" class="btn btn-ghost btn-sm">Detail</a>
         <?php if($c['status']==='pending'): ?>
           <form method="POST" style="display:inline;"><?=csrf_field()?><input type="hidden" name="action" value="approve_center"><input type="hidden" name="center_id" value="<?=$c['id']?>"><button class="btn btn-sm btn-success" type="submit">✓ Approve</button></form>
           <button class="btn btn-sm btn-danger" onclick="openRejectModal(<?=$c['id']?>,'<?=addslashes(sanitize($c['name']))?>')">✕ Reject</button>
@@ -911,12 +995,11 @@ include __DIR__ . '/../../templates/layout.php';
   </div>
 </div>
 
-<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
   <?php foreach([
     ['val'=>$centerDetail['students'],'lbl'=>'Students','icon'=>'👥'],
     ['val'=>$centerDetail['teachers'],'lbl'=>'Teachers','icon'=>'🧑‍🏫'],
     ['val'=>$centerDetail['groups'],'lbl'=>'Groups','icon'=>'📁'],
-    ['val'=>$centerDetail['plan_name']??'No plan','lbl'=>'Current Plan','icon'=>'⭐'],
   ] as $ds):?>
   <div class="stat-box">
     <div style="font-size:1.4rem;margin-bottom:6px;"><?=$ds['icon']?></div>
@@ -931,7 +1014,7 @@ include __DIR__ . '/../../templates/layout.php';
   <div class="card-header"><strong>Subscription</strong></div>
   <div class="card-body">
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:0.84rem;">
-      <div><div style="color:var(--text-muted);font-size:0.7rem;margin-bottom:3px;text-transform:uppercase;">Plan</div><strong><?=sanitize($centerDetail['plan_name'])?></strong><?=$centerDetail['plan_price']>0?' — $'.number_format($centerDetail['plan_price'],0).'/mo':''?></div>
+      <div><div style="color:var(--text-muted);font-size:0.7rem;margin-bottom:3px;text-transform:uppercase;">Plan</div><strong><?=sanitize($centerDetail['plan_name'])?></strong><?=$centerDetail['plan_price']>0?' — '.number_format($centerDetail['plan_price'],0).' EGP/mo':''?></div>
       <div><div style="color:var(--text-muted);font-size:0.7rem;margin-bottom:3px;text-transform:uppercase;">Status</div><span class="badge <?=$statusBadge[$centerDetail['sub_status']]??'badge-muted'?>"><?=ucfirst($centerDetail['sub_status']??'—')?></span></div>
       <div><div style="color:var(--text-muted);font-size:0.7rem;margin-bottom:3px;text-transform:uppercase;">Expires</div><?=$centerDetail['expires_at']?date('M j, Y',strtotime($centerDetail['expires_at'])):'No expiry set'?></div>
     </div>
@@ -994,7 +1077,7 @@ include __DIR__ . '/../../templates/layout.php';
         <div style="font-size:0.71rem;color:var(--text-muted);"><?=ucfirst($p['billing_cycle'])?> · <?=$p['sub_count']?> center<?=$p['sub_count']!=1?'s':''?></div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:1.5rem;font-weight:800;"><?=$p['price']>0?'$'.number_format($p['price'],0):'Free'?></div>
+        <div style="font-size:1.5rem;font-weight:800;"><?=$p['price']>0?number_format($p['price'],0).' EGP':'Free'?></div>
         <span class="badge <?=$p['is_active']?'badge-success':'badge-muted'?>"><?=$p['is_active']?'Active':'Inactive'?></span>
       </div>
     </div>
@@ -1160,10 +1243,187 @@ include __DIR__ . '/../../templates/layout.php';
   </div>
 </div>
 
+<?php if ($view === 'plan_requests'): ?>
+
+<div style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+  <div>
+    <h2 style="font-family:var(--font-display);font-size:1.2rem;font-weight:700;margin-bottom:2px;">Plan Change Requests</h2>
+    <p style="font-size:0.82rem;color:var(--text-muted);">Centers that have requested a plan switch. Review and approve or reject each request.</p>
+  </div>
+  <?php if($pendingPlanCount>0): ?>
+  <span style="background:var(--danger-dim);color:var(--danger);font-size:0.78rem;font-weight:700;padding:5px 14px;border-radius:20px;">
+    <?=$pendingPlanCount?> pending
+  </span>
+  <?php endif; ?>
+</div>
+
+<?php if($planRequests): ?>
+<div class="card" style="margin-bottom:24px;">
+  <div class="card-header">
+    <span class="card-title">⏳ Pending Requests</span>
+    <span style="font-size:0.78rem;color:var(--text-muted);"><?=count($planRequests)?> waiting</span>
+  </div>
+  <div class="card-body no-padding">
+    <?php foreach($planRequests as $req): ?>
+    <div style="padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+      <!-- Center info -->
+      <div style="flex:1;min-width:200px;">
+        <div style="font-weight:700;font-size:0.9rem;color:var(--text-primary);margin-bottom:3px;">
+          <?=sanitize($req['center_name'])?>
+        </div>
+        <div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:6px;">
+          Requested by <strong><?=sanitize($req['owner_name'] ?? 'Owner')?></strong>
+          on <?=date('M j, Y 	 g:i a', strtotime($req['requested_at']))?>
+        </div>
+        <!-- Plan change arrow -->
+        <div style="display:flex;align-items:center;gap:8px;font-size:0.82rem;">
+          <span style="background:var(--bg-elevated);padding:3px 10px;border-radius:20px;color:var(--text-muted);"><?=sanitize($req['from_plan_name'] ?? 'Current Plan')?></span>
+          <span style="color:var(--text-muted);">→</span>
+          <span style="background:rgba(82,71,230,0.1);color:var(--accent);padding:3px 10px;border-radius:20px;font-weight:600;"><?=sanitize($req['to_plan_name'])?></span>
+        </div>
+        <?php if($req['reason']): ?>
+        <div style="margin-top:8px;font-size:0.77rem;color:var(--text-muted);background:var(--bg-elevated);padding:8px 12px;border-radius:var(--radius-sm);max-width:400px;">
+          <strong>Their reason:</strong> <?=sanitize($req['reason'])?>
+        </div>
+        <?php endif; ?>
+      </div>
+      <!-- Actions -->
+      <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
+        <button type="button" class="btn btn-success btn-sm"
+                onclick="openApprovePlanModal(<?=$req['id']?>, '<?=sanitize($req['center_name'])?>', '<?=sanitize($req['to_plan_name'])?>')">
+          ✓ Approve
+        </button>
+        <button type="button" class="btn btn-danger btn-sm"
+                onclick="openRejectPlanModal(<?=$req['id']?>, '<?=sanitize($req['center_name'])?>', '<?=sanitize($req['to_plan_name'])?>')">
+          ✕ Reject
+        </button>
+      </div>
+    </div>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php else: ?>
+<div class="card" style="margin-bottom:24px;">
+  <div class="card-body" style="text-align:center;padding:48px 24px;">
+    <div style="font-size:2.5rem;margin-bottom:12px;">✅</div>
+    <div style="font-weight:600;font-size:0.95rem;color:var(--text-primary);margin-bottom:4px;">No pending requests</div>
+    <div style="font-size:0.82rem;color:var(--text-muted);">All plan change requests have been reviewed.</div>
+  </div>
+</div>
+<?php endif; ?>
+
+<?php if($resolvedPlanRequests): ?>
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Recent Activity</span>
+    <span style="font-size:0.76rem;color:var(--text-muted);">Last 30 resolved</span>
+  </div>
+  <div class="card-body no-padding">
+    <?php foreach($resolvedPlanRequests as $req): ?>
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <div style="font-size:1.1rem;flex-shrink:0;">
+        <?=$req['status']==='approved'?'✅':'❌'?>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.84rem;font-weight:600;color:var(--text-primary);">
+          <?=sanitize($req['center_name'])?>
+          <span style="font-weight:400;color:var(--text-muted);">→</span>
+          <?=sanitize($req['to_plan_name'])?>
+          <span style="font-size:0.72rem;margin-left:6px;padding:1px 8px;border-radius:10px;background:<?=$req['status']==='approved'?'var(--success-dim)':'var(--danger-dim)'?>;color:<?=$req['status']==='approved'?'var(--success)':'var(--danger)'?>;"><?=$req['status']==='approved'?'Approved':'Rejected'?></span>
+        </div>
+        <div style="font-size:0.76rem;color:var(--text-muted);margin-top:2px;">
+          By <?=sanitize($req['resolved_by_name'] ?? 'Admin')?>
+          · <?=date('M j, Y', strtotime($req['resolved_at'] ?? 'now'))?>
+          <?php if($req['admin_note']): ?> · <em><?=sanitize($req['admin_note'])?></em><?php endif; ?>
+        </div>
+      </div>
+    </div>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
+
+<?php endif; /* end plan_requests view */ ?>
+
 <?php endif; /* end views */ ?>
 
 
 <!-- ────────────────── MODALS ────────────────── -->
+
+<!-- Approve Plan Request Modal -->
+<div id="approvePlanModal" class="modal-backdrop" style="display:none;">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <span class="modal-title">✅ Approve Plan Change</span>
+      <button class="modal-close" onclick="closeModal('approvePlanModal')">✕</button>
+    </div>
+    <form method="POST">
+      <?=csrf_field()?>
+      <input type="hidden" name="action" value="approve_plan_request">
+      <input type="hidden" name="request_id" id="approvePlanReqId">
+      <div class="modal-body">
+        <p style="font-size:0.88rem;color:var(--text-secondary);margin-bottom:14px;">
+          Approving this request will immediately switch
+          <strong id="approveCenterName"></strong> to the
+          <strong id="approvePlanName"></strong> plan.
+        </p>
+        <div class="form-group">
+          <label class="form-label">Note to center <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+          <textarea name="admin_note" class="form-control" rows="2" placeholder="e.g. Enjoy your new plan!"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('approvePlanModal')">Cancel</button>
+        <button type="submit" class="btn btn-success">✓ Approve & Apply Plan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Reject Plan Request Modal -->
+<div id="rejectPlanModal" class="modal-backdrop" style="display:none;">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <span class="modal-title">❌ Reject Plan Request</span>
+      <button class="modal-close" onclick="closeModal('rejectPlanModal')">✕</button>
+    </div>
+    <form method="POST">
+      <?=csrf_field()?>
+      <input type="hidden" name="action" value="reject_plan_request">
+      <input type="hidden" name="request_id" id="rejectPlanReqId">
+      <div class="modal-body">
+        <p style="font-size:0.88rem;color:var(--text-secondary);margin-bottom:14px;">
+          Rejecting this request will keep
+          <strong id="rejectCenterName"></strong> on their current plan.
+          The center owner will be notified.
+        </p>
+        <div class="form-group">
+          <label class="form-label">Reason for rejection <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+          <textarea name="admin_note" class="form-control" rows="2" placeholder="e.g. Please contact support to discuss your options."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('rejectPlanModal')">Cancel</button>
+        <button type="submit" class="btn btn-danger">✕ Reject Request</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openApprovePlanModal(reqId, centerName, planName) {
+  document.getElementById('approvePlanReqId').value        = reqId;
+  document.getElementById('approveCenterName').textContent = centerName;
+  document.getElementById('approvePlanName').textContent   = planName;
+  openModal('approvePlanModal');
+}
+function openRejectPlanModal(reqId, centerName, planName) {
+  document.getElementById('rejectPlanReqId').value        = reqId;
+  document.getElementById('rejectCenterName').textContent = centerName;
+  openModal('rejectPlanModal');
+}
+</script>
+
 
 <!-- Subscription modal -->
 <div class="modal-backdrop" id="planModal">
@@ -1187,7 +1447,7 @@ include __DIR__ . '/../../templates/layout.php';
           <label class="form-label required">Plan</label>
           <select name="plan_id" class="form-control">
             <?php foreach($activePlans as $p):?>
-            <option value="<?=$p['id']?>"><?=sanitize($p['name'])?><?=$p['price']>0?' — $'.number_format($p['price'],0).'/mo':' — Free'?></option>
+            <option value="<?=$p['id']?>"><?=sanitize($p['name'])?><?=$p['price']>0?' — '.number_format($p['price'],0).' EGP/mo':' — Free'?></option>
             <?php endforeach;?>
           </select>
         </div>
@@ -1394,7 +1654,7 @@ include __DIR__ . '/../../templates/layout.php';
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div class="form-group"><label class="form-label required">Name</label><input type="text" name="name" class="form-control" value="<?=sanitize($editPlan['name']??'')?>" required></div>
           <div class="form-group"><label class="form-label">Slug</label><input type="text" name="slug" class="form-control" id="planSlug" value="<?=sanitize($editPlan['slug']??'')?>" placeholder="individual"></div>
-          <div class="form-group"><label class="form-label">Price (USD/mo)</label><input type="number" name="price" class="form-control" step="0.01" min="0" value="<?=$editPlan['price']??0?>"></div>
+          <div class="form-group"><label class="form-label">Price (EGP/mo)</label><input type="number" name="price" class="form-control" step="0.01" min="0" value="<?=$editPlan['price']??0?>"></div>
           <div class="form-group"><label class="form-label">Billing cycle</label><select name="billing_cycle" class="form-control"><?php foreach(['monthly','yearly','lifetime'] as $cy):?><option value="<?=$cy?>" <?=($editPlan['billing_cycle']??'monthly')===$cy?'selected':''?>><?=ucfirst($cy)?></option><?php endforeach;?></select></div>
           <div class="form-group"><label class="form-label">Max students</label><input type="number" name="max_students" id="pmMaxStu" class="form-control" value="<?=$editPlan['max_students']??100?>"></div>
           <div class="form-group" id="pmMaxTchGroup"><label class="form-label">Max teachers <span id="pmMaxTchNote" style="font-weight:400;color:var(--text-muted);font-size:0.72rem;">(academy only)</span></label><input type="number" name="max_teachers" id="pmMaxTch" class="form-control" value="<?=$editPlan['max_teachers']??999999?>"></div>

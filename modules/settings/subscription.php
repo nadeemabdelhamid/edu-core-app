@@ -13,7 +13,6 @@ $breadcrumbs = [
     ['label'=>'Subscription'],
 ];
 
-// Current subscription
 $subStmt = $pdo->prepare("
     SELECT s.*, p.name AS plan_name, p.slug AS plan_slug, p.plan_type,
            p.price, p.billing_cycle, p.max_students, p.max_teachers, p.max_groups, p.features
@@ -24,17 +23,14 @@ $sub = $subStmt->fetch();
 $features    = json_decode($sub['features'] ?? '{}', true) ?? [];
 $currentType = $sub['plan_type'] ?? 'academy';
 
-// All plans — separate into types for display
 $plansStmt = $pdo->prepare("SELECT * FROM plans WHERE is_active=1 ORDER BY FIELD(plan_type,'individual','academy'), price ASC");
 $plansStmt->execute();
 $plans = $plansStmt->fetchAll();
 
-// Usage stats
 $usageStudents = checkLimit('students');
 $usageGroups   = checkLimit('groups');
 $usageTeachers = checkLimit('teachers');
 
-// Subscription history
 $histStmt = $pdo->prepare("
     SELECT sh.*, p1.name AS from_name, p2.name AS to_name, u.name AS changed_by_name
     FROM subscription_history sh
@@ -45,30 +41,94 @@ $histStmt = $pdo->prepare("
 $histStmt->execute([$cid]);
 $history = $histStmt->fetchAll();
 
-// Handle plan change (super_admin or simulated upgrade)
-if ($_SERVER['REQUEST_METHOD']==='POST' && isRole('owner')) {
+// Pending plan change request
+$pendingReq = $pdo->prepare("
+    SELECT pcr.*, p.name AS to_plan_name, pfrom.name AS from_plan_name
+    FROM plan_change_requests pcr
+    JOIN plans p ON p.id = pcr.to_plan_id
+    LEFT JOIN plans pfrom ON pfrom.id = pcr.from_plan_id
+    WHERE pcr.center_id = ? AND pcr.status = 'pending'
+    ORDER BY pcr.requested_at DESC LIMIT 1");
+$pendingReq->execute([$cid]);
+$pendingRequest = $pendingReq->fetch();
+
+// Most recently resolved request (show feedback for 7 days)
+$lastResolved = $pdo->prepare("
+    SELECT pcr.*, p.name AS to_plan_name
+    FROM plan_change_requests pcr
+    JOIN plans p ON p.id = pcr.to_plan_id
+    WHERE pcr.center_id = ? AND pcr.status IN ('approved','rejected')
+      AND pcr.resolved_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    ORDER BY pcr.resolved_at DESC LIMIT 1");
+$lastResolved->execute([$cid]);
+$lastResolvedReq = $lastResolved->fetch();
+
+// Handle POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isRole('owner')) {
     csrf_verify();
     $action = $_POST['action'] ?? '';
-    if ($action === 'upgrade' && ($newPlanId=(int)$_POST['plan_id'])) {
-        $planCheck = $pdo->prepare("SELECT id,name FROM plans WHERE id=? AND is_active=1");
-        $planCheck->execute([$newPlanId]);
-        $newPlan = $planCheck->fetch();
-        if ($newPlan) {
-            $fromPlanId = $sub['plan_id'] ?? null;
-            // Update subscription
-            $pdo->prepare("UPDATE subscriptions SET plan_id=?,status='active',expires_at=DATE_ADD(NOW(),INTERVAL 30 DAY),updated_at=NOW() WHERE center_id=? ORDER BY id DESC LIMIT 1")
-                ->execute([$newPlanId,$cid]);
-            // Log history
-            $pdo->prepare("INSERT INTO subscription_history (center_id,from_plan,to_plan,changed_by,reason) VALUES (?,?,?,?,'Owner upgrade')")
-                ->execute([$cid,$fromPlanId,$newPlanId,authId()]);
-            auditLog('subscription.upgraded','subscription',null,['to_plan'=>$newPlan['name']]);
-            flash('success','Plan upgraded to '.$newPlan['name'].'!');
+
+    if ($action === 'request_plan_change') {
+        $newPlanId = (int)($_POST['plan_id'] ?? 0);
+        $reason    = trim($_POST['reason'] ?? '');
+
+        if ($pendingRequest) {
+            flash('warning', 'You already have a pending plan change request. Please wait for the admin to review it.');
             redirect('/educore/modules/settings/subscription.php');
         }
+
+        $planCheck = $pdo->prepare("SELECT id, name FROM plans WHERE id=? AND is_active=1");
+        $planCheck->execute([$newPlanId]);
+        $newPlan = $planCheck->fetch();
+
+        if (!$newPlan) {
+            flash('error', 'Invalid plan selected.');
+            redirect('/educore/modules/settings/subscription.php');
+        }
+
+        if ($newPlanId == ($sub['plan_id'] ?? 0)) {
+            flash('info', 'You are already on this plan.');
+            redirect('/educore/modules/settings/subscription.php');
+        }
+
+        $pdo->prepare("
+            INSERT INTO plan_change_requests
+                (center_id, user_id, from_plan_id, to_plan_id, reason, status, requested_at)
+            VALUES (?, ?, ?, ?, ?, 'pending', NOW())")
+            ->execute([$cid, authId(), $sub['plan_id'] ?? null, $newPlanId, $reason]);
+
+        // Notify all super admins
+        $admins = $pdo->query("SELECT id FROM users WHERE role='super_admin' AND is_active=1")->fetchAll();
+        $cName  = $pdo->query("SELECT name FROM centers WHERE id=$cid")->fetchColumn();
+        foreach ($admins as $adm) {
+            pushNotification(
+                $adm['id'], 'plan_change',
+                'Plan Change Request',
+                "$cName wants to switch to {$newPlan['name']}.",
+                '/educore/modules/admin/centers.php?view=plan_requests',
+                null
+            );
+        }
+
+        auditLog('subscription.change_requested', 'plan_change_request', null, [
+            'from_plan' => $sub['plan_id'] ?? null,
+            'to_plan'   => $newPlanId,
+        ]);
+
+        flash('success', "Request to switch to {$newPlan['name']} submitted. The admin will review it shortly.");
+        redirect('/educore/modules/settings/subscription.php');
+    }
+
+    if ($action === 'cancel_plan_request') {
+        $reqId = (int)($_POST['request_id'] ?? 0);
+        $pdo->prepare("DELETE FROM plan_change_requests WHERE id=? AND center_id=? AND status='pending'")
+            ->execute([$reqId, $cid]);
+        flash('info', 'Plan change request cancelled.');
+        redirect('/educore/modules/settings/subscription.php');
     }
 }
 
-$planColors = ['starter'=>'#8892a4','pro'=>'#3b82f6','enterprise'=>'#f5a623'];
+$planColors  = ['starter'=>'#8892a4','pro'=>'#3b82f6','enterprise'=>'#f5a623'];
 $featureList = ['attendance'=>'Attendance','exams'=>'Exams & Quizzes','payments'=>'Payment Tracking','reports'=>'Reports & Analytics','export'=>'Data Export'];
 
 function usageMeter($label, $used, $max, $color='var(--accent)') {
@@ -95,7 +155,6 @@ include __DIR__ . '/../../templates/layout.php';
 </div>
 
 <?php if ($sub): ?>
-<!-- Plan type banner -->
 <div style="background:<?=$currentType==='individual'?'rgba(139,92,246,0.06)':'rgba(59,130,246,0.06)'?>;border:1px solid <?=$currentType==='individual'?'rgba(139,92,246,0.2)':'rgba(59,130,246,0.2)'?>;border-radius:var(--radius-md);padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
   <div style="font-size:2rem;"><?=$currentType==='individual'?'👤':'🏫'?></div>
   <div style="flex:1;min-width:0;">
@@ -107,8 +166,7 @@ include __DIR__ . '/../../templates/layout.php';
       <?php if($currentType==='individual'): ?>
         You are the sole teacher — full control over all students, groups, exams, videos and attendance.
       <?php else: ?>
-        Multi-teacher academy — you have full oversight of all teachers, students, groups, and finances.
-        Teachers only see their own students and groups.
+        Multi-teacher academy — full oversight of teachers, students, groups, and finances.
       <?php endif; ?>
     </div>
   </div>
@@ -121,7 +179,6 @@ include __DIR__ . '/../../templates/layout.php';
 </div>
 <?php endif; ?>
 
-<!-- Settings sub-nav -->
 <div style="display:flex;gap:4px;margin-bottom:24px;border-bottom:1px solid var(--border);">
   <?php foreach([
     ['./','🏫','Profile'],['subscription.php','💳','Subscription'],['staff.php','👥','Staff'],['notifications.php','🔔','Notifications'],['security.php','🔐','Security']
@@ -130,10 +187,54 @@ include __DIR__ . '/../../templates/layout.php';
   <?php endforeach; ?>
 </div>
 
+<?php if ($pendingRequest): ?>
+<div style="background:rgba(245,166,35,0.08);border:1px solid rgba(245,166,35,0.35);border-radius:var(--radius-md);padding:16px 20px;margin-bottom:20px;display:flex;align-items:flex-start;gap:14px;">
+  <div style="font-size:1.4rem;flex-shrink:0;margin-top:1px;">⏳</div>
+  <div style="flex:1;min-width:0;">
+    <div style="font-weight:700;font-size:0.9rem;color:var(--text-primary);margin-bottom:4px;">Plan Change Request Pending</div>
+    <div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:10px;">
+      You requested to switch from <strong><?=sanitize($pendingRequest['from_plan_name'] ?? 'current plan')?></strong>
+      to <strong><?=sanitize($pendingRequest['to_plan_name'])?></strong>
+      on <?=date('M j, Y \a\t g:i a', strtotime($pendingRequest['requested_at']))?>.
+      The admin will review and action your request.
+    </div>
+    <?php if($pendingRequest['reason']): ?>
+    <div style="font-size:0.78rem;color:var(--text-muted);background:var(--bg-elevated);padding:8px 12px;border-radius:var(--radius-sm);margin-bottom:10px;">
+      <strong>Your reason:</strong> <?=sanitize($pendingRequest['reason'])?>
+    </div>
+    <?php endif; ?>
+    <form method="POST" style="display:inline;">
+      <?=csrf_field()?>
+      <input type="hidden" name="action" value="cancel_plan_request">
+      <input type="hidden" name="request_id" value="<?=$pendingRequest['id']?>">
+      <button type="submit" class="btn btn-ghost btn-sm" style="font-size:0.76rem;"
+              onclick="return confirm('Cancel this plan change request?')">Cancel Request</button>
+    </form>
+  </div>
+  <span style="background:rgba(245,166,35,0.15);color:#b45309;font-size:0.68rem;font-weight:700;padding:3px 10px;border-radius:20px;flex-shrink:0;white-space:nowrap;">Under Review</span>
+</div>
+<?php endif; ?>
+
+<?php if ($lastResolvedReq && !$pendingRequest): ?>
+<div style="background:<?=$lastResolvedReq['status']==='approved'?'rgba(34,197,94,0.07)':'rgba(239,68,68,0.07)'?>;border:1px solid <?=$lastResolvedReq['status']==='approved'?'rgba(34,197,94,0.3)':'rgba(239,68,68,0.25)'?>;border-radius:var(--radius-md);padding:14px 18px;margin-bottom:20px;display:flex;align-items:flex-start;gap:12px;">
+  <div style="font-size:1.2rem;flex-shrink:0;"><?=$lastResolvedReq['status']==='approved'?'✅':'❌'?></div>
+  <div style="flex:1;min-width:0;">
+    <div style="font-weight:700;font-size:0.86rem;color:var(--text-primary);margin-bottom:3px;">
+      Plan request <?=$lastResolvedReq['status']==='approved'?'approved':'rejected'?> — <?=sanitize($lastResolvedReq['to_plan_name'])?>
+    </div>
+    <?php if($lastResolvedReq['admin_note']): ?>
+    <div style="font-size:0.79rem;color:var(--text-secondary);">
+      <strong>Admin note:</strong> <?=sanitize($lastResolvedReq['admin_note'])?>
+    </div>
+    <?php endif; ?>
+    <div style="font-size:0.72rem;color:var(--text-muted);margin-top:3px;"><?=date('M j, Y', strtotime($lastResolvedReq['resolved_at']))?></div>
+  </div>
+</div>
+<?php endif; ?>
+
 <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
 <div>
 
-<!-- Current plan -->
 <?php if($sub): ?>
 <div class="card" style="margin-bottom:20px;">
   <div class="card-body">
@@ -145,7 +246,7 @@ include __DIR__ . '/../../templates/layout.php';
           <?php if($sub['status']==='trial'): ?>
             Trial — <?= trialDaysLeft()!==null?trialDaysLeft().' days left':'expired' ?>
           <?php else: ?>
-            <?= ucfirst($sub['status']) ?> · <?= $sub['price']>0?'$'.number_format($sub['price'],2).'/'.$sub['billing_cycle']:'Free' ?>
+            <?= ucfirst($sub['status']) ?> · <?= $sub['price']>0?number_format($sub['price'],2).' EGP/'.$sub['billing_cycle']:'Free' ?>
           <?php endif; ?>
         </div>
       </div>
@@ -156,8 +257,6 @@ include __DIR__ . '/../../templates/layout.php';
         <?php endif; ?>
       </div>
     </div>
-
-    <!-- Features -->
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;padding-top:16px;border-top:1px solid var(--border);">
       <?php foreach($featureList as $fk=>$fl): ?>
       <span style="display:flex;align-items:center;gap:5px;font-size:0.76rem;padding:4px 10px;border-radius:20px;background:<?=$features[$fk]??false?'var(--success-dim)':'var(--bg-elevated)'?>;color:<?=$features[$fk]??false?'var(--success)':'var(--text-muted)'?>;">
@@ -169,32 +268,43 @@ include __DIR__ . '/../../templates/layout.php';
 </div>
 <?php endif; ?>
 
-<!-- Usage meters -->
 <div class="card" style="margin-bottom:20px;">
   <div class="card-header"><span class="card-title">Usage</span></div>
   <div class="card-body">
     <?php
-    usageMeter('Students',       $usageStudents['used'], $usageStudents['max'], '#3b82f6');
-    usageMeter('Groups',         $usageGroups['used'],   $usageGroups['max'],   '#8b5cf6');
+    usageMeter('Students',         $usageStudents['used'], $usageStudents['max'], '#3b82f6');
+    usageMeter('Groups',           $usageGroups['used'],   $usageGroups['max'],   '#8b5cf6');
     usageMeter('Teachers & Staff', $usageTeachers['used'], $usageTeachers['max'], '#22c55e');
     ?>
   </div>
 </div>
 
-<!-- Plan upgrade grid -->
 <div class="card">
-  <div class="card-header"><span class="card-title">Available Plans</span></div>
+  <div class="card-header">
+    <span class="card-title">Available Plans</span>
+    <?php if($pendingRequest): ?>
+    <span style="font-size:0.72rem;background:rgba(245,166,35,0.12);color:#b45309;padding:3px 10px;border-radius:20px;font-weight:600;">
+      ⏳ A request is pending — cancel it above to request a different plan
+    </span>
+    <?php endif; ?>
+  </div>
   <div class="card-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">
     <?php foreach($plans as $p):
       $pf = json_decode($p['features']??'{}',true)??[];
-      $isCurrent = $p['id']==$sub['plan_id'];
+      $isCurrent = $p['id'] == ($sub['plan_id'] ?? 0);
+      $isPending  = $pendingRequest && $p['id'] == $pendingRequest['to_plan_id'];
       $pc = $planColors[$p['slug']]??'var(--accent)';
     ?>
-    <div style="border:2px solid <?=$isCurrent?$pc:'var(--border)'?>;border-radius:var(--radius-md);padding:20px;position:relative;<?=$isCurrent?'background:rgba(59,130,246,0.04)':''?>">
-      <?php if($isCurrent): ?><div style="position:absolute;top:-1px;right:12px;background:<?=$pc?>;color:#fff;font-size:0.65rem;font-weight:700;padding:2px 10px;border-radius:0 0 6px 6px;">CURRENT</div><?php endif; ?>
+    <div style="border:2px solid <?=$isCurrent?$pc:($isPending?'rgba(245,166,35,0.6)':'var(--border)')?>;border-radius:var(--radius-md);padding:20px;position:relative;<?=$isCurrent?'background:rgba(59,130,246,0.04)':($isPending?'background:rgba(245,166,35,0.04)':'')?>">
+      <?php if($isCurrent): ?>
+        <div style="position:absolute;top:-1px;right:12px;background:<?=$pc?>;color:#fff;font-size:0.65rem;font-weight:700;padding:2px 10px;border-radius:0 0 6px 6px;">CURRENT</div>
+      <?php elseif($isPending): ?>
+        <div style="position:absolute;top:-1px;right:12px;background:#f59e0b;color:#fff;font-size:0.65rem;font-weight:700;padding:2px 10px;border-radius:0 0 6px 6px;">⏳ REQUESTED</div>
+      <?php endif; ?>
+
       <div style="font-family:var(--font-display);font-size:1.2rem;font-weight:700;color:<?=$pc?>;margin-bottom:4px;"><?=sanitize($p['name'])?></div>
       <div style="font-size:1.5rem;font-weight:800;color:var(--text-primary);margin-bottom:12px;">
-        <?=$p['price']>0?'$'.number_format($p['price'],0):'Free'?>
+        <?=$p['price']>0?number_format($p['price'],0).' EGP':'Free'?>
         <?php if($p['price']>0): ?><span style="font-size:0.75rem;font-weight:400;color:var(--text-muted);">/<?=$p['billing_cycle']?></span><?php endif; ?>
       </div>
       <div style="font-size:0.77rem;color:var(--text-muted);margin-bottom:16px;line-height:1.8;">
@@ -205,33 +315,34 @@ include __DIR__ . '/../../templates/layout.php';
       <?php foreach($featureList as $fk=>$fl): ?>
       <div style="font-size:0.75rem;margin-bottom:3px;color:<?=($pf[$fk]??false)?'var(--success)':'var(--text-muted)'?>;"><?=($pf[$fk]??false)?'✓':'✗'?> <?=$fl?></div>
       <?php endforeach; ?>
-      <?php if(!$isCurrent): ?>
-      <form method="POST" style="margin-top:16px;">
-        <?=csrf_field()?><input type="hidden" name="action" value="upgrade"><input type="hidden" name="plan_id" value="<?=$p['id']?>">
-        <button type="submit" class="btn btn-primary w-full btn-sm" style="background:<?=$pc?>;border-color:<?=$pc?>;"
-                onclick="return confirm('Switch to <?=sanitize($p['name'])?> plan?')">
-          <?=$p['price']>$sub['price']?'Upgrade':'Switch'?> →
-        </button>
-      </form>
-      <?php else: ?>
-      <div style="margin-top:16px;padding:8px;text-align:center;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.76rem;color:var(--text-muted);">Active Plan</div>
-      <?php endif; ?>
+
+      <div style="margin-top:16px;">
+        <?php if($isCurrent): ?>
+          <div style="padding:8px;text-align:center;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.76rem;color:var(--text-muted);">Active Plan</div>
+        <?php elseif($isPending): ?>
+          <div style="padding:8px;text-align:center;border:1px solid rgba(245,166,35,0.4);border-radius:var(--radius-sm);font-size:0.76rem;color:#92400e;background:rgba(245,166,35,0.08);">⏳ Request pending review</div>
+        <?php elseif($pendingRequest): ?>
+          <div style="padding:8px;text-align:center;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.76rem;color:var(--text-muted);opacity:0.55;" title="Cancel your pending request first">Pending request — cancel above first</div>
+        <?php else: ?>
+          <button type="button" class="btn btn-primary w-full btn-sm" style="background:<?=$pc?>;border-color:<?=$pc?>;"
+                  onclick="openPlanRequestModal(<?=$p['id']?>, '<?=sanitize($p['name'])?>', '<?=$p['price']>0?number_format($p['price'],0).' EGP/'.$p['billing_cycle']:'Free'?>')">
+            <?=$p['price']>($sub['price']??0)?'Request Upgrade':'Request Switch'?> →
+          </button>
+        <?php endif; ?>
+      </div>
     </div>
     <?php endforeach; ?>
   </div>
 </div>
 </div>
 
-<!-- Sidebar history -->
 <div>
   <div class="card">
     <div class="card-header"><span class="card-title">Plan History</span></div>
     <div class="card-body no-padding">
       <?php if($history): foreach($history as $h): ?>
       <div style="padding:12px 18px;border-bottom:1px solid var(--border);font-size:0.79rem;">
-        <div style="font-weight:600;color:var(--text-primary);">
-          <?=sanitize($h['from_name']??'—')?> → <?=sanitize($h['to_name'])?>
-        </div>
+        <div style="font-weight:600;color:var(--text-primary);"><?=sanitize($h['from_name']??'—')?> → <?=sanitize($h['to_name'])?></div>
         <div style="color:var(--text-muted);margin-top:2px;"><?=date('M j, Y',strtotime($h['created_at']))?></div>
       </div>
       <?php endforeach; else: ?>
@@ -241,5 +352,47 @@ include __DIR__ . '/../../templates/layout.php';
   </div>
 </div>
 </div>
+
+<!-- Plan Request Modal -->
+<div id="planReqModal" class="modal-backdrop" style="display:none;">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <h3 class="modal-title">Request Plan Change</h3>
+      <button class="modal-close" onclick="closeModal('planReqModal')">&times;</button>
+    </div>
+    <form method="POST">
+      <?=csrf_field()?>
+      <input type="hidden" name="action" value="request_plan_change">
+      <input type="hidden" name="plan_id" id="reqPlanId" value="">
+      <div class="modal-body">
+        <div style="background:var(--bg-elevated);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:16px;">
+          <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:4px;">Requesting switch to</div>
+          <div style="font-weight:700;font-size:1.05rem;color:var(--text-primary);" id="reqPlanName">—</div>
+          <div style="font-size:0.82rem;color:var(--text-muted);" id="reqPlanPrice"></div>
+        </div>
+        <div style="font-size:0.82rem;color:var(--text-secondary);background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;">
+          ℹ️ Your plan will <strong>not</strong> change immediately. The admin will review your request and activate the new plan once approved.
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reason <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+          <textarea name="reason" class="form-control" rows="3" placeholder="e.g. I need to add more teachers…" style="resize:vertical;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('planReqModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Submit Request →</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openPlanRequestModal(planId, planName, planPrice) {
+  document.getElementById('reqPlanId').value          = planId;
+  document.getElementById('reqPlanName').textContent  = planName;
+  document.getElementById('reqPlanPrice').textContent = planPrice;
+  openModal('planReqModal');
+}
+</script>
 
 <?php include __DIR__ . '/../../templates/layout_end.php'; ?>

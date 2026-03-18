@@ -581,6 +581,9 @@ include __DIR__ . '/../../templates/layout.php';
 
 <script>
 // ── Modal ────────────────────────────────────────────────────────────────────
+// Set initial correct-field state on page load
+(function() { if (document.getElementById('bCorrectMcq')) updateTypeUI('mcq'); })();
+
 function openAdd() {
   document.getElementById('bankAction').value    = 'add';
   document.getElementById('bankQid').value       = '';
@@ -635,6 +638,12 @@ document.getElementById('bankModal').addEventListener('click', function(e) {
 function updateTypeUI(t) {
   document.getElementById('bMcqOpts').style.display = t === 'mcq'        ? '' : 'none';
   document.getElementById('bTfOpts').style.display  = t === 'true_false' ? '' : 'none';
+  // Disable inactive radio/inputs so only the active correct-answer field submits
+  document.getElementById('bCorrectMcq').disabled = (t !== 'mcq');
+  var tfTrue  = document.getElementById('bTfTrue');
+  var tfFalse = document.getElementById('bTfFalse');
+  if (tfTrue)  tfTrue.disabled  = (t !== 'true_false');
+  if (tfFalse) tfFalse.disabled = (t !== 'true_false');
 }
 
 // ── Correct option ─────────────────────────────────────────────────────────

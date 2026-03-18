@@ -436,6 +436,27 @@ function videoThumbnailUrl(string $provider, string $videoId): string {
     return ''; // Vimeo thumbnails require an API call — handled in create.php
 }
 
+// ── Ensure plan_change_requests table exists ─────────────────
+try {
+    getDB()->query("SELECT 1 FROM plan_change_requests LIMIT 1");
+} catch (Exception $e) {
+    getDB()->exec("CREATE TABLE IF NOT EXISTS plan_change_requests (
+        id             INT AUTO_INCREMENT PRIMARY KEY,
+        center_id      INT NOT NULL,
+        user_id        INT NOT NULL,
+        from_plan_id   INT DEFAULT NULL,
+        to_plan_id     INT NOT NULL,
+        status         ENUM('pending','approved','rejected') DEFAULT 'pending',
+        reason         TEXT DEFAULT NULL,
+        admin_note     TEXT DEFAULT NULL,
+        resolved_by    INT DEFAULT NULL,
+        requested_at   DATETIME DEFAULT NOW(),
+        resolved_at    DATETIME DEFAULT NULL,
+        INDEX idx_center (center_id),
+        INDEX idx_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+
 // ─── FEATURE MODULES (loaded after all helpers defined) ────
 require_once __DIR__ . '/access_guard.php';
 require_once __DIR__ . '/scheduler.php';

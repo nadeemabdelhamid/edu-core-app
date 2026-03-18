@@ -163,7 +163,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                         sort($correct); sort($given);
                         $isCorrect=($correct===$given)?1:0;
                     } else {
-                        $isCorrect=(strtolower($ans)===strtolower($q['correct_answer']))?1:0;
+                        // Guard: if MCQ has 'true'/'false' as correct_answer, it was
+                        // stored incorrectly due to a form field collision bug.
+                        // Treat those questions as ungraded rather than always-wrong.
+                        $ca = trim($q['correct_answer'] ?? '');
+                        if ($q['type']==='mcq' && in_array(strtolower($ca), ['true','false'])) {
+                            $isCorrect = null; // cannot auto-grade corrupted question
+                            $hasManual = true;
+                        } else {
+                            $isCorrect = (strtolower($ans) === strtolower($ca)) ? 1 : 0;
+                        }
                     }
                     $scoreAwarded=$isCorrect?$q['points']:0;
                     $autoScore+=$scoreAwarded;

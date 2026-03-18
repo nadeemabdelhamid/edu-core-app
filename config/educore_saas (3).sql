@@ -428,6 +428,30 @@ CREATE TABLE `payments` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `plan_change_requests`
+--
+
+CREATE TABLE `plan_change_requests` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `center_id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `from_plan_id` int(11) DEFAULT NULL,
+  `to_plan_id` int(11) NOT NULL,
+  `status` enum('pending','approved','rejected') DEFAULT 'pending',
+  `reason` text DEFAULT NULL,
+  `admin_note` text DEFAULT NULL,
+  `resolved_by` int(11) DEFAULT NULL,
+  `requested_at` datetime DEFAULT current_timestamp(),
+  `resolved_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_center` (`center_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_to_plan` (`to_plan_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `plans`
 --
 

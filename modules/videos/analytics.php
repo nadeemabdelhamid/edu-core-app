@@ -2,8 +2,8 @@
 require_once __DIR__ . '/../../includes/helpers.php';
 requireRole('owner', 'teacher');
 
-if (!hasFeature('video_analytics')) {
-    flash('error', 'Watch analytics are available on the Enterprise plan only.');
+if (!hasFeature('videos')) {
+    flash('error', 'Video analytics require a plan with Videos enabled.');
     redirect('/educore/modules/settings/subscription.php');
 }
 

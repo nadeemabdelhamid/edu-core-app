@@ -757,10 +757,12 @@ function confirmAction(message, callback) {
 // 4. ONBOARDING FLOW (first-time owner setup)
 // ═══════════════════════════════════════════════
 (function() {
-  const ONBOARD_KEY = 'ec_onboarded';
-  const isOwner = document.body.dataset.role === 'owner';
-  const alreadyDone = localStorage.getItem(ONBOARD_KEY) === '1';
-  if (!isOwner || alreadyDone) return;
+  // Server-side flag: only show for new owner accounts (created within 48 hours)
+  // Once dismissed it sets a localStorage key so it doesn't re-show on the same browser
+  const ONBOARD_KEY = 'ec_onboarded_' + (document.body.dataset.role || '');
+  const shouldShow  = <?= json_encode($showOnboarding ?? false) ?>;
+  const dismissed   = localStorage.getItem(ONBOARD_KEY) === '1';
+  if (!shouldShow || dismissed) return;
 
   const STEPS = [
     {

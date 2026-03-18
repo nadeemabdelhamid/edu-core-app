@@ -20,6 +20,13 @@ $roleColors = [
 $userColor = $roleColors[$user['role']] ?? '#f5a623';
 $flashMessages = getFlash();
 
+// Show onboarding tour if this is a new owner account (created within 48 hours)
+$showOnboarding = false;
+if (isRole('owner') && !empty($user['created_at'])) {
+    $accountAgeHours = (time() - strtotime($user['created_at'])) / 3600;
+    $showOnboarding = ($accountAgeHours <= 48);
+}
+
 // ── Build nav based on role ─────────────────────────────────
 
 if ($user['role'] === 'student') {
@@ -42,8 +49,9 @@ if ($user['role'] === 'student') {
         $_sa_pdo      = getDB();
         $_sa_pending  = (int)$_sa_pdo->query("SELECT COUNT(*) FROM centers WHERE status='pending'")->fetchColumn();
         try { $_sa_resets = (int)$_sa_pdo->query("SELECT COUNT(*) FROM password_reset_requests WHERE status='pending'")->fetchColumn(); } catch(Exception $e){ $_sa_resets=0; }
+        try { $_sa_plan_reqs = (int)$_sa_pdo->query("SELECT COUNT(*) FROM plan_change_requests WHERE status='pending'")->fetchColumn(); } catch(Exception $e){ $_sa_plan_reqs=0; }
         $_sa_expiring = (int)$_sa_pdo->query("SELECT COUNT(*) FROM subscriptions WHERE status='active' AND expires_at BETWEEN NOW() AND DATE_ADD(NOW(),INTERVAL 7 DAY)")->fetchColumn();
-    } catch(Exception $e) { $_sa_pending=0; $_sa_resets=0; $_sa_expiring=0; }
+    } catch(Exception $e) { $_sa_pending=0; $_sa_resets=0; $_sa_plan_reqs=0; $_sa_expiring=0; }
 
     $navItems = [
         'platform' => [
@@ -60,6 +68,11 @@ if ($user['role'] === 'student') {
              'key'  => 'admin_passwords',
              'badge'=> $_sa_resets > 0 ? $_sa_resets : null,
              'badge_title' => $_sa_resets > 0 ? $_sa_resets.' pending' : null],
+            ['href' => '/educore/modules/admin/centers.php?view=plan_requests',
+             'icon' => 'star',      'label' => 'Plan Requests',
+             'key'  => 'admin_plan_requests',
+             'badge'=> isset($_sa_plan_reqs) && $_sa_plan_reqs > 0 ? $_sa_plan_reqs : null,
+             'badge_title' => isset($_sa_plan_reqs) && $_sa_plan_reqs > 0 ? $_sa_plan_reqs.' pending' : null],
             ['href' => '/educore/modules/admin/centers.php?view=notifications',
              'icon' => 'bell',      'label' => 'Notifications',
              'key'  => 'admin_notifications'],
@@ -286,7 +299,7 @@ $sectionLabels = [
             <div class="notif-panel-body">
               <?php
               $notifs=getUnreadNotifications(authId(),8);
-              $notifTypeIcons=['payment'=>'💳','attendance'=>'📋','exam'=>'📝','system'=>'⚙️','subscription'=>'💎','security'=>'🔐','info'=>'ℹ️','announcement'=>'📢','warning'=>'⚠️','success'=>'✅','billing'=>'💳','maintenance'=>'🔧','approval'=>'✅','rejection'=>'❌','password_reset'=>'🔐'];
+              $notifTypeIcons=['payment'=>'💳','attendance'=>'📋','exam'=>'📝','system'=>'⚙️','subscription'=>'💎','security'=>'🔐','info'=>'ℹ️','announcement'=>'📢','warning'=>'⚠️','success'=>'✅','billing'=>'💳','maintenance'=>'🔧','approval'=>'✅','rejection'=>'❌','password_reset'=>'🔐','plan_change'=>'💳'];
               if($notifs): foreach($notifs as $n):
                 $ico = $notifTypeIcons[$n['type']] ?? '🔔';
                 $tag = !empty($n['link']) ? 'a href="'.sanitize($n['link']).'"' : 'div';
