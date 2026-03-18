@@ -727,22 +727,563 @@ select.form-control {
 .plan-enterprise { background: var(--accent-subtle); color: var(--accent);   border-color: rgba(82,71,230,0.2); }
 
 /* RESPONSIVE */
+
+/* ═══════════════════════════════════════════════════════════════
+   EDUCORE — FULL RESPONSIVE SYSTEM
+   Breakpoints:
+     ≥ 1025px  Desktop     — full sidebar pinned, full topbar
+     769-1024  Tablet      — off-canvas sidebar + hamburger
+     ≤ 768px   Phone/small — stripped topbar + bottom nav
+     ≤ 480px   Small phone — max compression
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 0. BASE MOBILE SAFETY ───────────────────────────────────── */
+* { box-sizing: border-box; }
+html, body { max-width: 100%; }
 @media (max-width: 1024px) {
-  /* On mobile sidebar is always off-canvas; overlay shows when open */
-  .sidebar { transform: translateX(-100%) !important; }
-  .sidebar.open { transform: translateX(0) !important; box-shadow: var(--shadow-lg); }
-  .main-content { margin-left: 0 !important; }
-  .sidebar-overlay { display: block; }
+  html, body { overflow-x: hidden; }
+}
+img, video, iframe { max-width: 100%; height: auto; }
+
+/* ── 1. SIDEBAR OFF-CANVAS (tablet + phone) ──────────────────── */
+@media (max-width: 1024px) {
+  .sidebar {
+    transform: translateX(-100%);
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 300;
+    width: var(--sidebar-w);
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1),
+                box-shadow 0.28s ease;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 6px 0 32px rgba(0,0,0,0.22);
+  }
+  .main-content {
+    margin-left: 0 !important;
+  }
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(15,23,42,0.45);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    z-index: 299;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  .sidebar-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* ── 2. HAMBURGER BUTTON ─────────────────────────────────────── */
+/* Always visible — CSS controls show/hide */
+@media (min-width: 1025px) {
+  .topbar-menu-btn { display: none !important; }
+}
+@media (max-width: 1024px) {
+  .topbar-menu-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* ── 3. TOPBAR (tablet 769-1024) ─────────────────────────────── */
+@media (max-width: 1024px) {
+  .topbar { padding: 0 16px; gap: 10px; }
+  .topbar-search-wrap { max-width: 260px; }
+  .topbar-search-kbd  { display: none; }
+}
+
+/* ── 4. TOPBAR (phone ≤768) ──────────────────────────────────── */
+@media (max-width: 768px) {
+  :root { --header-h: 56px; }
+
+  .topbar {
+    height: 56px;
+    padding: 0 12px;
+    gap: 6px;
+  }
+
+  /* Hide search (bottom nav Search button opens palette) */
+  .topbar-search-wrap { display: none !important; }
+
+  /* Hide plan badge */
+  .plan-badge { display: none !important; }
+
+  /* Hide username text, keep avatar circle */
+  .topbar-user-name { display: none !important; }
+  .topbar-user-chip {
+    padding: 0;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    justify-content: center;
+  }
+  .topbar-user-chip > svg:last-child { display: none; }
+
+  /* Circular action buttons */
+  .topbar-btn, .dark-toggle {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+  }
+
+  /* Settings/security links in topbar — hide on phone (they're in sidebar) */
+  .topbar-actions > a.topbar-btn { display: none; }
+
+  /* Notifications & user menus — full-width floating panel */
+  .notif-panel {
+    position: fixed;
+    top: 64px;
+    right: 8px; left: 8px;
+    width: auto;
+    max-height: 72vh;
+    overflow-y: auto;
+    z-index: 400;
+  }
+  .topbar-user-menu {
+    position: fixed;
+    top: 64px;
+    right: 8px; left: 8px;
+    width: auto;
+    z-index: 400;
+  }
+
+  /* Breadcrumb — truncate aggressively */
+  .breadcrumb { max-width: 180px; overflow: hidden; }
+  .breadcrumb a, .breadcrumb .current { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
+}
+
+@media (max-width: 480px) {
+  .topbar { padding: 0 8px; gap: 4px; }
+  .topbar-title { font-size: 0.84rem; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+/* ── 5. MAIN CONTENT PADDING ─────────────────────────────────── */
+@media (max-width: 1024px) {
+  .page-content { padding: 24px 20px; }
 }
 @media (max-width: 768px) {
-  .page-content { padding: 20px 16px; }
-  .stats-grid { grid-template-columns: 1fr 1fr; }
-  .form-row.cols-2, .form-row.cols-3 { grid-template-columns: 1fr; }
-  .topbar { padding: 0 16px; }
+  .page-content {
+    padding: 14px;
+    /* leave room for bottom nav + iOS safe area */
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 8px));
+  }
 }
 @media (max-width: 480px) {
-  .stats-grid { grid-template-columns: 1fr; }
+  .page-content {
+    padding: 10px;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 8px));
+  }
 }
+
+/* ── 6. PAGE HEADER ──────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .page-header .btn { width: 100%; justify-content: center; }
+  .page-header > div:last-child { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+  .page-title    { font-size: 1.25rem; }
+  .page-subtitle { font-size: 0.78rem; }
+}
+
+/* ── 7. STATS GRID ───────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    margin-bottom: 16px;
+  }
+  .stat-card   { padding: 14px 16px; }
+  .stat-value  { font-size: 1.6rem; }
+  .stat-icon   { width: 34px; height: 34px; font-size: 1rem; margin-bottom: 10px; }
+  .stat-label  { font-size: 0.76rem; }
+}
+@media (max-width: 380px) {
+  .stats-grid { grid-template-columns: 1fr !important; }
+}
+
+/* ── 8. CARDS ────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .card           { border-radius: var(--radius-md); }
+  .card-header    { padding: 12px 16px; }
+  .card-body      { padding: 16px; }
+}
+@media (max-width: 480px) {
+  .card-header { padding: 10px 14px; }
+  .card-body   { padding: 14px; }
+}
+
+/* ── 9. TWO-COLUMN CONTENT+SIDEBAR LAYOUTS ───────────────────── */
+/* Any inline two-column grid: content area + right sidebar */
+@media (max-width: 900px) {
+  div[style*="grid-template-columns:1fr 340px"],
+  div[style*="grid-template-columns: 1fr 340px"],
+  div[style*="grid-template-columns:1fr 320px"],
+  div[style*="grid-template-columns: 1fr 320px"],
+  div[style*="grid-template-columns:1fr 300px"],
+  div[style*="grid-template-columns: 1fr 300px"],
+  div[style*="grid-template-columns:2fr 1fr"],
+  div[style*="grid-template-columns: 2fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+@media (max-width: 768px) {
+  /* Catch-all for any inline grid that should stack */
+  div[style*="display:grid"],
+  div[style*="display: grid"] {
+    /* Don't override ALL grids — only ones with specific multi-col patterns */
+  }
+  /* Three and four column stat grids inline */
+  div[style*="grid-template-columns:repeat(3"],
+  div[style*="grid-template-columns: repeat(3"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  div[style*="grid-template-columns:repeat(4"],
+  div[style*="grid-template-columns: repeat(4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 480px) {
+  div[style*="grid-template-columns:repeat(2"],
+  div[style*="grid-template-columns: repeat(2"] {
+    grid-template-columns: 1fr !important;
+  }
+  div[style*="grid-template-columns:repeat(3"],
+  div[style*="grid-template-columns: repeat(3"] {
+    grid-template-columns: 1fr !important;
+  }
+  div[style*="grid-template-columns:repeat(4"],
+  div[style*="grid-template-columns: repeat(4"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── 10. FORMS ───────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .form-row.cols-2,
+  .form-row.cols-3 {
+    grid-template-columns: 1fr !important;
+  }
+}
+/* Prevent iOS zoom on input focus (font-size must be ≥16px) */
+@media (max-width: 768px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="search"],
+  input[type="date"],
+  input[type="time"],
+  input[type="url"],
+  textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* ── 11. DATA TABLES ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Wrap every card containing a table */
+  .card-body:has(.data-table),
+  .card-body:has(table) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0;
+  }
+  .data-table { min-width: 520px; }
+
+  /* Reduce font/padding inside tables */
+  .data-table th { font-size: 0.66rem; padding: 10px 12px; }
+  .data-table td { padding: 10px 12px; font-size: 0.82rem; }
+}
+
+/* ── 12. MODALS → bottom sheet on phone ─────────────────────── */
+@media (max-width: 640px) {
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .modal {
+    max-width: 100% !important;
+    width: 100% !important;
+    border-radius: 20px 20px 0 0 !important;
+    max-height: 90vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    transform: translateY(30px) scale(1);
+  }
+  .modal-backdrop.open .modal {
+    transform: translateY(0) scale(1);
+  }
+  /* Drag handle */
+  .modal-header {
+    padding-top: 22px;
+    position: relative;
+  }
+  .modal-header::before {
+    content: '';
+    position: absolute;
+    top: 8px; left: 50%;
+    transform: translateX(-50%);
+    width: 38px; height: 4px;
+    background: var(--border-light);
+    border-radius: 2px;
+  }
+  .modal-body   { padding: 0 18px 18px; }
+  .modal-footer { padding: 14px 18px; flex-direction: column; gap: 8px; }
+  .modal-footer .btn { width: 100%; justify-content: center; }
+}
+
+/* ── 13. MOBILE BOTTOM NAVIGATION ───────────────────────────── */
+#mobileBottomNav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+  z-index: 250;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -2px 16px rgba(0,0,0,0.08);
+}
+@media (max-width: 768px)  { #mobileBottomNav { display: flex !important; } }
+@media (min-width: 769px)  { #mobileBottomNav { display: none !important; } }
+
+.mbn-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 8px 4px 10px;
+  min-height: 56px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s;
+}
+.mbn-item svg { transition: transform 0.1s; }
+.mbn-item:active svg  { transform: scale(0.88); }
+.mbn-active           { color: var(--accent) !important; }
+.mbn-active svg       { stroke: var(--accent); }
+/* Top pip */
+.mbn-active::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 25%; right: 25%;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 0 0 3px 3px;
+}
+
+/* ── 14. PAGINATION ──────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .pagination {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 12px 14px;
+    font-size: 0.76rem;
+  }
+  .page-btns { flex-wrap: wrap; }
+  .page-btn  { min-width: 34px; height: 34px; }
+}
+
+/* ── 15. PAGE FOOTER ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Hidden behind bottom nav — don't show */
+  .page-footer { display: none !important; }
+}
+
+/* ── 16. AUTH / LOGIN PAGES ──────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Two-col auth layout → single col */
+  .auth-wrapper {
+    display: block !important;
+    grid-template-columns: 1fr !important;
+  }
+  .auth-panel {
+    display: none !important;
+  }
+  .auth-form-panel {
+    padding: 36px 24px !important;
+    min-height: 100vh;
+  }
+}
+@media (max-width: 480px) {
+  .auth-form-panel { padding: 28px 16px !important; }
+}
+
+/* ── 17. SETTINGS SUB-NAV ────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Scrollable horizontal tab row */
+  div[style*="border-bottom:1px solid var(--border)"][style*="display:flex"],
+  div[style*="display:flex;gap:4px;margin-bottom:24px;border-bottom"] {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+  }
+  div[style*="display:flex;gap:4px;margin-bottom:24px;border-bottom"]::-webkit-scrollbar { display: none; }
+  div[style*="display:flex;gap:4px;margin-bottom:24px;border-bottom"] a {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
+/* ── 18. ADMIN PANEL (super admin) ───────────────────────────── */
+@media (max-width: 768px) {
+  .sa-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .sa-tabs::-webkit-scrollbar { display: none; }
+  .sa-tab { white-space: nowrap; flex-shrink: 0; }
+
+  /* Admin action buttons on center rows */
+  .act-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .act-btns .btn-sm {
+    font-size: 0.7rem;
+    padding: 4px 8px;
+  }
+}
+
+/* ── 19. EXAM TAKE PAGE ──────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Compact exam header */
+  .exam-header-inner {
+    padding: 0 14px !important;
+    gap: 8px !important;
+  }
+  #timerDisplay { font-size: 1.1rem !important; }
+  .timer-label  { display: none !important; }
+  .exam-main    { padding: 0 12px !important; max-width: 100% !important; }
+  .exam-q-body  { padding: 16px !important; }
+  .opt-label    { padding: 11px 14px !important; font-size: 0.85rem !important; min-height: 44px; }
+
+  /* Exam nav panel → bottom drawer */
+  #navPanel {
+    position: fixed !important;
+    bottom: 0; left: 0; right: 0;
+    top: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: 56vh;
+    border-left: none !important;
+    border-top: 1px solid var(--border) !important;
+    border-radius: 20px 20px 0 0;
+    z-index: 450;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 8px 16px 20px !important;
+    transform: translateY(100%) !important;
+    transition: transform 0.3s cubic-bezier(0.4,0,0.2,1) !important;
+  }
+  #navPanel::before {
+    content: '';
+    display: block;
+    width: 36px; height: 4px;
+    background: var(--border-light);
+    border-radius: 2px;
+    margin: 0 auto 14px;
+  }
+  #navPanel.nav-visible { transform: translateY(0) !important; }
+  #navGrid { grid-template-columns: repeat(7, 1fr) !important; gap: 4px !important; }
+}
+@media (max-width: 480px) {
+  .exam-main  { padding: 0 8px !important; }
+  .exam-q-body { padding: 12px !important; }
+  #navGrid    { grid-template-columns: repeat(6, 1fr) !important; }
+}
+
+/* ── 20. VIDEOS ──────────────────────────────────────────────── */
+@media (min-width: 481px) and (max-width: 768px) {
+  .video-grid { grid-template-columns: repeat(2, 1fr) !important; }
+}
+@media (max-width: 480px) {
+  .video-grid { grid-template-columns: 1fr !important; }
+}
+
+/* ── 21. ATTENDANCE CODE ─────────────────────────────────────── */
+@media (max-width: 480px) {
+  .attendance-code-display { padding: 24px 16px; }
+  .code-value { font-size: 3rem; letter-spacing: 0.12em; }
+}
+
+/* ── 22. FLASH MESSAGES ──────────────────────────────────────── */
+@media (max-width: 640px) {
+  .flash-container {
+    top: 68px;
+    left: 10px; right: 10px;
+    max-width: none;
+  }
+  .flash-msg { font-size: 0.82rem; }
+}
+
+/* ── 23. EMPTY STATE ─────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .empty-state { padding: 40px 20px; }
+  .empty-icon  { font-size: 2.5rem; }
+}
+
+/* ── 24. TOUCH TARGETS (≥44px) ───────────────────────────────── */
+@media (max-width: 1024px) {
+  .btn        { min-height: 40px; }
+  .btn-sm     { min-height: 36px; }
+  .nav-item   { min-height: 44px; }
+  .mbn-item   { min-height: 56px; }
+  a, button, [role="button"] { -webkit-tap-highlight-color: transparent; }
+  /* Larger close buttons on mobile */
+  .modal-close { width: 38px; height: 38px; }
+}
+
+/* ── 25. SCROLL BEHAVIOR ─────────────────────────────────────── */
+@media (max-width: 768px) {
+  .sidebar-nav,
+  .modal-body,
+  .notif-panel-body,
+  #navPanel {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+}
+
+/* ── 26. UTILITY VISIBILITY HELPERS ─────────────────────────── */
+@media (max-width: 768px) {
+  .hide-mobile  { display: none !important; }
+  .show-mobile  { display: block !important; }
+}
+@media (min-width: 769px) {
+  .hide-desktop { display: none !important; }
+  .show-mobile  { display: none !important; }
+}
+@media (min-width: 769px) and (max-width: 1024px) {
+  .hide-tablet  { display: none !important; }
+}
+
+
 
 /* UTILITIES */
 .flex { display: flex; }
@@ -796,9 +1337,7 @@ select.form-control {
   flex-shrink: 0;
 }
 
-.topbar-menu-btn {
-  display: flex !important;
-}
+/* .topbar-menu-btn display controlled by @media rules in responsive section */
 
 /* Search */
 .topbar-search-wrap {
@@ -1203,55 +1742,6 @@ body.sidebar-collapsed .topbar-menu-btn:hover {
 
 body.sidebar-collapsed .topbar-menu-btn svg {
   transform: rotate(180deg);
-}
-
-/* ─── MOBILE BOTTOM NAVIGATION ───────────────────────────── */
-#mobileBottomNav {
-  display: none;
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  height: 64px;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border);
-  z-index: 200;
-  display: flex;
-  align-items: stretch;
-  padding: 0;
-  box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
-}
-
-.mbn-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  color: var(--text-muted);
-  text-decoration: none;
-  font-size: 0.62rem;
-  font-weight: 600;
-  padding: 8px 4px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  transition: color 0.15s;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.mbn-item:hover,
-.mbn-item:active { color: var(--accent); }
-
-.mbn-active {
-  color: var(--accent) !important;
-}
-
-.mbn-active svg {
-  stroke: var(--accent);
-}
-
-@media (min-width: 769px) {
-  #mobileBottomNav { display: none !important; }
 }
 
 /* ─── DARK MODE TRANSITION ───────────────────────────────── */

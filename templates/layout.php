@@ -240,7 +240,7 @@ $sectionLabels = [
 
       <!-- Left: hamburger + breadcrumb / page title -->
       <div class="topbar-left">
-        <button class="topbar-btn topbar-menu-btn" id="menuToggle" onclick="toggleSidebar()" title="Toggle menu" style="display:none">
+        <button class="topbar-btn topbar-menu-btn" id="menuToggle" onclick="toggleSidebar()" title="Toggle menu">
           <?= navIcon('menu') ?>
         </button>
         <?php if (!empty($breadcrumbs)): ?>
