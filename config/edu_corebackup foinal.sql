@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Mar 15, 2026 at 08:47 PM
+-- Generation Time: Apr 04, 2026 at 08:14 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -18,7 +18,7 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 
 --
--- Database: `educore_saas`
+-- Database: `edu_corebackup`
 --
 
 -- --------------------------------------------------------
@@ -69,28 +69,14 @@ CREATE TABLE `attendance_summary` (
   `center_id` int(11) NOT NULL,
   `student_id` int(11) NOT NULL,
   `group_id` int(11) NOT NULL,
+  `month_year` varchar(7) NOT NULL COMMENT 'YYYY-MM',
   `total_sessions` int(11) DEFAULT 0,
   `present_count` int(11) DEFAULT 0,
   `absent_count` int(11) DEFAULT 0,
   `late_count` int(11) DEFAULT 0,
   `excused_count` int(11) DEFAULT 0,
-  `rate` decimal(5,2) DEFAULT 0.00,
-  `last_updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `attendance_trusted_networks`
---
-
-CREATE TABLE `attendance_trusted_networks` (
-  `id` int(11) NOT NULL,
-  `center_id` int(11) NOT NULL,
-  `label` varchar(100) DEFAULT NULL,
-  `ip_range` varchar(100) NOT NULL COMMENT 'CIDR or single IP',
-  `is_active` tinyint(1) DEFAULT 1,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `attendance_rate` decimal(5,2) DEFAULT 0.00,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -124,16 +110,16 @@ CREATE TABLE `centers` (
   `email` varchar(255) NOT NULL,
   `phone` varchar(50) DEFAULT NULL,
   `address` text DEFAULT NULL,
-  `branches` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Array of {name,address,phone} objects' CHECK (json_valid(`branches`)),
+  `status` enum('active','suspended','trial','pending') DEFAULT 'pending',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `branches` longtext DEFAULT NULL,
   `logo` varchar(255) DEFAULT NULL,
   `timezone` varchar(100) DEFAULT 'UTC',
   `locale` varchar(10) DEFAULT 'en',
-  `language` enum('en','ar') NOT NULL DEFAULT 'en',
+  `language` enum('en','ar') DEFAULT 'en',
   `center_type` varchar(50) DEFAULT NULL,
-  `settings` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`settings`)),
-  `status` enum('active','suspended','trial','pending') DEFAULT 'pending',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+  `settings` longtext DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -180,13 +166,13 @@ CREATE TABLE `exams` (
   `show_results` enum('immediately','after_close','manual') DEFAULT 'after_close',
   `allow_review` tinyint(1) DEFAULT 1,
   `max_attempts` int(11) DEFAULT 1,
+  `is_hidden` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Hide exam from student list',
+  `exam_password` varchar(100) DEFAULT NULL COMMENT 'If set, students must enter this before starting',
+  `force_fullscreen` tinyint(1) NOT NULL DEFAULT 0,
+  `block_copy_paste` tinyint(1) NOT NULL DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `is_hidden` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Hide exam from student list (0=visible, 1=hidden)',
-  `is_open` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Allow students to enter exam (1=open, 0=locked)',
-  `exam_password` varchar(100) DEFAULT NULL COMMENT 'If set, students must enter this before starting',
-  `force_fullscreen` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Force student into fullscreen during exam',
-  `block_copy_paste` tinyint(1) NOT NULL DEFAULT 0 COMMENT '1 = disable right-click and Ctrl+C/V during exam'
+  `is_open` tinyint(1) DEFAULT 1 COMMENT '1=accepting new entries, 0=locked by teacher'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -213,11 +199,11 @@ CREATE TABLE `exam_answers` (
 --
 
 CREATE TABLE `exam_bookmarks` (
-  `id` int(10) UNSIGNED NOT NULL,
-  `submission_id` int(10) UNSIGNED NOT NULL,
-  `question_id` int(10) UNSIGNED NOT NULL,
+  `id` int(11) NOT NULL,
+  `submission_id` int(11) NOT NULL,
+  `question_id` int(11) NOT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -226,11 +212,11 @@ CREATE TABLE `exam_bookmarks` (
 --
 
 CREATE TABLE `exam_focus_log` (
-  `id` int(10) UNSIGNED NOT NULL,
-  `exam_id` int(10) UNSIGNED NOT NULL,
-  `submission_id` int(10) UNSIGNED NOT NULL,
-  `student_id` int(10) UNSIGNED NOT NULL,
-  `center_id` int(10) UNSIGNED NOT NULL,
+  `id` int(11) NOT NULL,
+  `exam_id` int(11) NOT NULL,
+  `submission_id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `center_id` int(11) NOT NULL,
   `event` enum('blur','focus') NOT NULL COMMENT 'blur=left page, focus=returned',
   `created_at` datetime NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -244,7 +230,6 @@ CREATE TABLE `exam_focus_log` (
 CREATE TABLE `exam_questions` (
   `id` int(11) NOT NULL,
   `exam_id` int(11) NOT NULL,
-  `question_id` int(11) DEFAULT NULL,
   `type` enum('mcq','true_false','short_answer') NOT NULL DEFAULT 'mcq',
   `question` text NOT NULL,
   `option_a` text DEFAULT NULL,
@@ -257,7 +242,8 @@ CREATE TABLE `exam_questions` (
   `sort_order` int(11) DEFAULT 0,
   `question_image` varchar(500) DEFAULT NULL COMMENT 'URL to uploaded image for this question',
   `is_multi_select` tinyint(1) NOT NULL DEFAULT 0 COMMENT '1 = student can pick multiple correct answers',
-  `correct_answers_multi` varchar(20) DEFAULT NULL COMMENT 'Comma-separated correct options e.g. a,c for multi-select'
+  `correct_answers_multi` varchar(20) DEFAULT NULL COMMENT 'Comma-separated correct options e.g. a,c',
+  `question_id` int(11) DEFAULT NULL COMMENT 'Optional reference to question_bank source'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -267,15 +253,15 @@ CREATE TABLE `exam_questions` (
 --
 
 CREATE TABLE `exam_reopens` (
-  `id` int(10) UNSIGNED NOT NULL,
-  `exam_id` int(10) UNSIGNED NOT NULL,
-  `student_id` int(10) UNSIGNED NOT NULL,
-  `center_id` int(10) UNSIGNED NOT NULL,
-  `granted_by` int(10) UNSIGNED NOT NULL,
+  `id` int(11) NOT NULL,
+  `exam_id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `center_id` int(11) NOT NULL,
+  `granted_by` int(11) NOT NULL,
   `reason` varchar(500) DEFAULT NULL,
   `used` tinyint(1) NOT NULL DEFAULT 0,
   `created_at` datetime NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -308,26 +294,6 @@ CREATE TABLE `exam_submissions` (
 -- --------------------------------------------------------
 
 --
--- Table structure for table `expenses`
---
-
-CREATE TABLE `expenses` (
-  `id` int(11) NOT NULL,
-  `center_id` int(11) NOT NULL,
-  `created_by` int(11) NOT NULL,
-  `category` varchar(100) NOT NULL,
-  `description` text DEFAULT NULL,
-  `amount` decimal(10,2) NOT NULL,
-  `expense_date` date NOT NULL,
-  `receipt_ref` varchar(100) DEFAULT NULL,
-  `notes` text DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- --------------------------------------------------------
-
---
 -- Table structure for table `groups`
 --
 
@@ -340,12 +306,12 @@ CREATE TABLE `groups` (
   `description` text DEFAULT NULL,
   `capacity` int(11) DEFAULT 30,
   `schedule` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`schedule`)),
-  `start_date` date DEFAULT NULL,
-  `end_date` date DEFAULT NULL,
   `monthly_fee` decimal(10,2) DEFAULT 0.00,
   `is_active` tinyint(1) DEFAULT 1,
+  `session_duration_minutes` int(11) DEFAULT 90 COMMENT 'Duration in minutes for auto-closing attendance sessions',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `session_duration_minutes` int(11) DEFAULT 90 COMMENT 'Duration in minutes for auto-closing attendance sessions'
+  `start_date` date DEFAULT NULL,
+  `end_date` date DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -420,9 +386,9 @@ CREATE TABLE `payments` (
   `status` enum('paid','partial','unpaid','overdue') DEFAULT 'unpaid',
   `notes` text DEFAULT NULL,
   `receipt_number` varchar(100) DEFAULT NULL,
-  `invoice_number` varchar(50) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `invoice_number` varchar(100) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -443,7 +409,28 @@ CREATE TABLE `plans` (
   `max_groups` int(11) DEFAULT 10,
   `features` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`features`)),
   `is_active` tinyint(1) DEFAULT 1,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `plan_change_requests`
+--
+
+CREATE TABLE `plan_change_requests` (
+  `id` int(11) NOT NULL,
+  `center_id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `from_plan_id` int(11) DEFAULT NULL,
+  `to_plan_id` int(11) NOT NULL,
+  `status` enum('pending','approved','rejected') DEFAULT 'pending',
+  `reason` text DEFAULT NULL,
+  `admin_note` text DEFAULT NULL,
+  `resolved_by` int(11) DEFAULT NULL,
+  `requested_at` datetime DEFAULT current_timestamp(),
+  `resolved_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -480,12 +467,12 @@ CREATE TABLE `question_bank` (
   `correct_answer` varchar(10) DEFAULT NULL,
   `points` decimal(5,2) NOT NULL DEFAULT 1.00,
   `explanation` text DEFAULT NULL,
+  `difficulty` enum('easy','medium','hard') NOT NULL DEFAULT 'medium',
+  `tags` varchar(500) DEFAULT NULL COMMENT 'Comma-separated tags for filtering',
+  `question_image` varchar(500) DEFAULT NULL COMMENT 'URL to uploaded image for this question',
   `is_active` tinyint(1) DEFAULT 1,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `difficulty` enum('easy','medium','hard') NOT NULL DEFAULT 'medium' COMMENT 'Question difficulty level',
-  `tags` varchar(500) DEFAULT NULL COMMENT 'Comma-separated tags for filtering',
-  `question_image` varchar(500) DEFAULT NULL COMMENT 'URL to uploaded image for this question'
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -559,7 +546,7 @@ CREATE TABLE `student_teachers` (
   `teacher_id` int(11) NOT NULL,
   `assigned_by` int(11) DEFAULT NULL,
   `assigned_at` datetime NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -575,7 +562,8 @@ CREATE TABLE `subscriptions` (
   `starts_at` datetime NOT NULL,
   `expires_at` datetime DEFAULT NULL,
   `trial_ends_at` datetime DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -588,7 +576,7 @@ CREATE TABLE `subscription_history` (
   `id` int(11) NOT NULL,
   `center_id` int(11) NOT NULL,
   `from_plan` int(11) DEFAULT NULL,
-  `to_plan` int(11) NOT NULL,
+  `to_plan` int(11) DEFAULT NULL COMMENT 'NULL if the referenced plan was deleted',
   `changed_by` int(11) DEFAULT NULL,
   `reason` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
@@ -607,13 +595,15 @@ CREATE TABLE `users` (
   `email` varchar(255) NOT NULL,
   `password` varchar(255) NOT NULL,
   `role` enum('super_admin','owner','teacher','assistant','accountant','student') NOT NULL DEFAULT 'teacher',
-  `avatar` varchar(255) DEFAULT NULL,
   `phone` varchar(50) DEFAULT NULL,
   `is_active` tinyint(1) DEFAULT 1,
   `last_login` datetime DEFAULT NULL,
-  `remember_token` varchar(100) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `totp_secret` varchar(64) DEFAULT NULL,
+  `totp_enabled` tinyint(1) NOT NULL DEFAULT 0,
+  `avatar` varchar(255) DEFAULT NULL,
+  `remember_token` varchar(100) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -636,7 +626,7 @@ CREATE TABLE `videos` (
   `available_from` datetime DEFAULT NULL,
   `available_until` datetime DEFAULT NULL,
   `sort_order` smallint(6) DEFAULT 0,
-  `created_by` int(11) NOT NULL,
+  `created_by` int(11) DEFAULT NULL COMMENT 'NULL if the creator user was deleted',
   `owner_teacher_id` int(11) DEFAULT NULL,
   `is_global` tinyint(1) NOT NULL DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -656,7 +646,7 @@ CREATE TABLE `video_attachments` (
   `filename` varchar(255) NOT NULL,
   `original_name` varchar(255) NOT NULL,
   `file_size` int(10) UNSIGNED DEFAULT 0,
-  `uploaded_by` int(11) NOT NULL,
+  `uploaded_by` int(11) DEFAULT NULL COMMENT 'NULL if the uploader was deleted',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -671,7 +661,7 @@ CREATE TABLE `video_comments` (
   `video_id` int(11) NOT NULL,
   `center_id` int(11) NOT NULL,
   `parent_id` int(11) DEFAULT NULL,
-  `author_id` int(11) NOT NULL,
+  `author_id` int(11) DEFAULT NULL COMMENT 'NULL if the author was deleted',
   `author_role` enum('teacher','owner','assistant','student') NOT NULL,
   `timestamp_sec` int(11) DEFAULT NULL,
   `body` text NOT NULL,
@@ -693,7 +683,7 @@ CREATE TABLE `video_playlists` (
   `title` varchar(255) NOT NULL,
   `description` text DEFAULT NULL,
   `is_visible` tinyint(1) DEFAULT 1,
-  `created_by` int(11) NOT NULL,
+  `created_by` int(11) DEFAULT NULL COMMENT 'NULL if the creator was deleted',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -746,16 +736,7 @@ ALTER TABLE `attendance_sessions`
 --
 ALTER TABLE `attendance_summary`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uq_summary` (`center_id`,`student_id`,`group_id`),
-  ADD KEY `student_id` (`student_id`),
-  ADD KEY `group_id` (`group_id`);
-
---
--- Indexes for table `attendance_trusted_networks`
---
-ALTER TABLE `attendance_trusted_networks`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `center_id` (`center_id`);
+  ADD UNIQUE KEY `unique_month` (`center_id`,`student_id`,`group_id`,`month_year`);
 
 --
 -- Indexes for table `audit_logs`
@@ -802,7 +783,8 @@ ALTER TABLE `exam_answers`
 --
 ALTER TABLE `exam_bookmarks`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uq_sub_q` (`submission_id`,`question_id`);
+  ADD UNIQUE KEY `uq_sub_q` (`submission_id`,`question_id`),
+  ADD KEY `ebk_fk_q` (`question_id`);
 
 --
 -- Indexes for table `exam_focus_log`
@@ -819,15 +801,17 @@ ALTER TABLE `exam_focus_log`
 --
 ALTER TABLE `exam_questions`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `exam_id` (`exam_id`),
-  ADD KEY `question_id` (`question_id`);
+  ADD KEY `exam_id` (`exam_id`);
 
 --
 -- Indexes for table `exam_reopens`
 --
 ALTER TABLE `exam_reopens`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `idx_exam_student` (`exam_id`,`student_id`);
+  ADD KEY `idx_exam_student` (`exam_id`,`student_id`),
+  ADD KEY `er_fk_student` (`student_id`),
+  ADD KEY `er_fk_center` (`center_id`),
+  ADD KEY `er_fk_granter` (`granted_by`);
 
 --
 -- Indexes for table `exam_submissions`
@@ -837,16 +821,8 @@ ALTER TABLE `exam_submissions`
   ADD UNIQUE KEY `uq_attempt` (`exam_id`,`student_id`,`attempt_number`),
   ADD KEY `student_id` (`student_id`),
   ADD KEY `center_id` (`center_id`),
-  ADD KEY `graded_by` (`graded_by`);
-
---
--- Indexes for table `expenses`
---
-ALTER TABLE `expenses`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `created_by` (`created_by`),
-  ADD KEY `idx_e_center_date` (`center_id`,`expense_date`),
-  ADD KEY `idx_e_center_category` (`center_id`,`category`);
+  ADD KEY `graded_by` (`graded_by`),
+  ADD KEY `idx_exam_status` (`exam_id`,`status`);
 
 --
 -- Indexes for table `groups`
@@ -878,7 +854,11 @@ ALTER TABLE `notifications`
 -- Indexes for table `password_reset_requests`
 --
 ALTER TABLE `password_reset_requests`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_status` (`status`),
+  ADD KEY `idx_user_id` (`user_id`),
+  ADD KEY `idx_center_id` (`center_id`),
+  ADD KEY `prr_fk_resolver` (`resolved_by`);
 
 --
 -- Indexes for table `payments`
@@ -897,6 +877,14 @@ ALTER TABLE `payments`
 ALTER TABLE `plans`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `slug` (`slug`);
+
+--
+-- Indexes for table `plan_change_requests`
+--
+ALTER TABLE `plan_change_requests`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_center` (`center_id`),
+  ADD KEY `idx_status` (`status`);
 
 --
 -- Indexes for table `playlist_videos`
@@ -928,7 +916,6 @@ ALTER TABLE `staff_invitations`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `token` (`token`),
   ADD KEY `invited_by` (`invited_by`),
-  ADD KEY `idx_token` (`token`),
   ADD KEY `idx_center_email` (`center_id`,`email`);
 
 --
@@ -947,7 +934,8 @@ ALTER TABLE `student_teachers`
   ADD UNIQUE KEY `uq_student_teacher` (`student_id`,`teacher_id`),
   ADD KEY `idx_center` (`center_id`),
   ADD KEY `idx_student` (`student_id`),
-  ADD KEY `idx_teacher` (`teacher_id`);
+  ADD KEY `idx_teacher` (`teacher_id`),
+  ADD KEY `stt_fk_assigner` (`assigned_by`);
 
 --
 -- Indexes for table `subscriptions`
@@ -1018,7 +1006,8 @@ ALTER TABLE `video_views`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uq_video_student` (`video_id`,`student_id`),
   ADD KEY `student_id` (`student_id`),
-  ADD KEY `idx_video` (`video_id`);
+  ADD KEY `idx_video` (`video_id`),
+  ADD KEY `vv_fk_center` (`center_id`);
 
 --
 -- AUTO_INCREMENT for dumped tables
@@ -1040,12 +1029,6 @@ ALTER TABLE `attendance_sessions`
 -- AUTO_INCREMENT for table `attendance_summary`
 --
 ALTER TABLE `attendance_summary`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `attendance_trusted_networks`
---
-ALTER TABLE `attendance_trusted_networks`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -1082,13 +1065,13 @@ ALTER TABLE `exam_answers`
 -- AUTO_INCREMENT for table `exam_bookmarks`
 --
 ALTER TABLE `exam_bookmarks`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `exam_focus_log`
 --
 ALTER TABLE `exam_focus_log`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `exam_questions`
@@ -1100,18 +1083,12 @@ ALTER TABLE `exam_questions`
 -- AUTO_INCREMENT for table `exam_reopens`
 --
 ALTER TABLE `exam_reopens`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `exam_submissions`
 --
 ALTER TABLE `exam_submissions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `expenses`
---
-ALTER TABLE `expenses`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -1148,6 +1125,12 @@ ALTER TABLE `payments`
 -- AUTO_INCREMENT for table `plans`
 --
 ALTER TABLE `plans`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `plan_change_requests`
+--
+ALTER TABLE `plan_change_requests`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -1242,200 +1225,221 @@ ALTER TABLE `video_views`
 -- Constraints for table `attendance_records`
 --
 ALTER TABLE `attendance_records`
-  ADD CONSTRAINT `attendance_records_ibfk_1` FOREIGN KEY (`session_id`) REFERENCES `attendance_sessions` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `attendance_records_ibfk_2` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `attendance_records_ibfk_3` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `ar_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `ar_fk_session` FOREIGN KEY (`session_id`) REFERENCES `attendance_sessions` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `ar_fk_student` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `attendance_sessions`
 --
 ALTER TABLE `attendance_sessions`
-  ADD CONSTRAINT `attendance_sessions_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `attendance_sessions_ibfk_2` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `attendance_sessions_ibfk_3` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
-
---
--- Constraints for table `attendance_summary`
---
-ALTER TABLE `attendance_summary`
-  ADD CONSTRAINT `attendance_summary_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `attendance_summary_ibfk_2` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `attendance_summary_ibfk_3` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE;
-
---
--- Constraints for table `attendance_trusted_networks`
---
-ALTER TABLE `attendance_trusted_networks`
-  ADD CONSTRAINT `attendance_trusted_networks_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `as_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `as_fk_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `as_fk_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `audit_logs`
 --
 ALTER TABLE `audit_logs`
-  ADD CONSTRAINT `audit_logs_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `audit_logs_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+  ADD CONSTRAINT `al_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `al_fk_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
 
 --
 -- Constraints for table `center_branches`
 --
 ALTER TABLE `center_branches`
-  ADD CONSTRAINT `center_branches_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `cb_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `exams`
 --
 ALTER TABLE `exams`
-  ADD CONSTRAINT `exams_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `exams_ibfk_2` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `exams_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `ex_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `ex_fk_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `ex_fk_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL;
 
 --
 -- Constraints for table `exam_answers`
 --
 ALTER TABLE `exam_answers`
-  ADD CONSTRAINT `exam_answers_ibfk_1` FOREIGN KEY (`submission_id`) REFERENCES `exam_submissions` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `exam_answers_ibfk_2` FOREIGN KEY (`exam_question_id`) REFERENCES `exam_questions` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `ea_fk_question` FOREIGN KEY (`exam_question_id`) REFERENCES `exam_questions` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `ea_fk_sub` FOREIGN KEY (`submission_id`) REFERENCES `exam_submissions` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `exam_bookmarks`
+--
+ALTER TABLE `exam_bookmarks`
+  ADD CONSTRAINT `ebk_fk_q` FOREIGN KEY (`question_id`) REFERENCES `exam_questions` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `ebk_fk_sub` FOREIGN KEY (`submission_id`) REFERENCES `exam_submissions` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `exam_focus_log`
+--
+ALTER TABLE `exam_focus_log`
+  ADD CONSTRAINT `efl_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `efl_fk_exam` FOREIGN KEY (`exam_id`) REFERENCES `exams` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `efl_fk_student` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `efl_fk_sub` FOREIGN KEY (`submission_id`) REFERENCES `exam_submissions` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `exam_questions`
 --
 ALTER TABLE `exam_questions`
-  ADD CONSTRAINT `exam_questions_ibfk_1` FOREIGN KEY (`exam_id`) REFERENCES `exams` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `exam_questions_ibfk_2` FOREIGN KEY (`question_id`) REFERENCES `question_bank` (`id`) ON DELETE SET NULL;
+  ADD CONSTRAINT `eq_fk_exam` FOREIGN KEY (`exam_id`) REFERENCES `exams` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `exam_reopens`
+--
+ALTER TABLE `exam_reopens`
+  ADD CONSTRAINT `er_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `er_fk_exam` FOREIGN KEY (`exam_id`) REFERENCES `exams` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `er_fk_granter` FOREIGN KEY (`granted_by`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `er_fk_student` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `exam_submissions`
 --
 ALTER TABLE `exam_submissions`
-  ADD CONSTRAINT `exam_submissions_ibfk_1` FOREIGN KEY (`exam_id`) REFERENCES `exams` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `exam_submissions_ibfk_2` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `exam_submissions_ibfk_3` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `exam_submissions_ibfk_4` FOREIGN KEY (`graded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
-
---
--- Constraints for table `expenses`
---
-ALTER TABLE `expenses`
-  ADD CONSTRAINT `expenses_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `expenses_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `es_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `es_fk_exam` FOREIGN KEY (`exam_id`) REFERENCES `exams` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `es_fk_grader` FOREIGN KEY (`graded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `es_fk_student` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `groups`
 --
 ALTER TABLE `groups`
-  ADD CONSTRAINT `groups_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `groups_ibfk_2` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+  ADD CONSTRAINT `g_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `g_fk_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
 
 --
 -- Constraints for table `group_students`
 --
 ALTER TABLE `group_students`
-  ADD CONSTRAINT `group_students_ibfk_1` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `group_students_ibfk_2` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `group_students_ibfk_3` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `gs_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `gs_fk_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `gs_fk_student` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `notifications`
 --
 ALTER TABLE `notifications`
-  ADD CONSTRAINT `notifications_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `notifications_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `n_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `n_fk_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `password_reset_requests`
+--
+ALTER TABLE `password_reset_requests`
+  ADD CONSTRAINT `prr_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `prr_fk_resolver` FOREIGN KEY (`resolved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `prr_fk_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `payments`
 --
 ALTER TABLE `payments`
-  ADD CONSTRAINT `payments_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `payments_ibfk_2` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `payments_ibfk_3` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL;
+  ADD CONSTRAINT `p_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `p_fk_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `p_fk_student` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `playlist_videos`
 --
 ALTER TABLE `playlist_videos`
-  ADD CONSTRAINT `playlist_videos_ibfk_1` FOREIGN KEY (`playlist_id`) REFERENCES `video_playlists` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `playlist_videos_ibfk_2` FOREIGN KEY (`video_id`) REFERENCES `videos` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `pv_fk_playlist` FOREIGN KEY (`playlist_id`) REFERENCES `video_playlists` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `pv_fk_video` FOREIGN KEY (`video_id`) REFERENCES `videos` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `question_bank`
 --
 ALTER TABLE `question_bank`
-  ADD CONSTRAINT `question_bank_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `question_bank_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `qb_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `qb_fk_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `staff_invitations`
 --
 ALTER TABLE `staff_invitations`
-  ADD CONSTRAINT `staff_invitations_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `staff_invitations_ibfk_2` FOREIGN KEY (`invited_by`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `si_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `si_fk_inviter` FOREIGN KEY (`invited_by`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `students`
 --
 ALTER TABLE `students`
-  ADD CONSTRAINT `students_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `students_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+  ADD CONSTRAINT `st_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `st_fk_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `student_teachers`
+--
+ALTER TABLE `student_teachers`
+  ADD CONSTRAINT `stt_fk_assigner` FOREIGN KEY (`assigned_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `stt_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `stt_fk_student` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `stt_fk_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `subscriptions`
 --
 ALTER TABLE `subscriptions`
-  ADD CONSTRAINT `subscriptions_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `subscriptions_ibfk_2` FOREIGN KEY (`plan_id`) REFERENCES `plans` (`id`);
+  ADD CONSTRAINT `sub_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `sub_fk_plan` FOREIGN KEY (`plan_id`) REFERENCES `plans` (`id`);
 
 --
 -- Constraints for table `subscription_history`
 --
 ALTER TABLE `subscription_history`
-  ADD CONSTRAINT `subscription_history_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `subscription_history_ibfk_2` FOREIGN KEY (`from_plan`) REFERENCES `plans` (`id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `subscription_history_ibfk_3` FOREIGN KEY (`to_plan`) REFERENCES `plans` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `subscription_history_ibfk_4` FOREIGN KEY (`changed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+  ADD CONSTRAINT `sh_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `sh_fk_changer` FOREIGN KEY (`changed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `sh_fk_from` FOREIGN KEY (`from_plan`) REFERENCES `plans` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `sh_fk_to` FOREIGN KEY (`to_plan`) REFERENCES `plans` (`id`) ON DELETE SET NULL;
 
 --
 -- Constraints for table `users`
 --
 ALTER TABLE `users`
-  ADD CONSTRAINT `users_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `u_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `videos`
 --
 ALTER TABLE `videos`
-  ADD CONSTRAINT `videos_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `videos_ibfk_2` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `videos_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `v_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `v_fk_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `v_fk_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL;
 
 --
 -- Constraints for table `video_attachments`
 --
 ALTER TABLE `video_attachments`
-  ADD CONSTRAINT `video_attachments_ibfk_1` FOREIGN KEY (`video_id`) REFERENCES `videos` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `video_attachments_ibfk_2` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `va_fk_uploader` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `va_fk_video` FOREIGN KEY (`video_id`) REFERENCES `videos` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `video_comments`
 --
 ALTER TABLE `video_comments`
-  ADD CONSTRAINT `video_comments_ibfk_1` FOREIGN KEY (`video_id`) REFERENCES `videos` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `video_comments_ibfk_2` FOREIGN KEY (`parent_id`) REFERENCES `video_comments` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `video_comments_ibfk_3` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `vc_fk_author` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `vc_fk_parent` FOREIGN KEY (`parent_id`) REFERENCES `video_comments` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `vc_fk_video` FOREIGN KEY (`video_id`) REFERENCES `videos` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `video_playlists`
 --
 ALTER TABLE `video_playlists`
-  ADD CONSTRAINT `video_playlists_ibfk_1` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `video_playlists_ibfk_2` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `video_playlists_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `vp_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `vp_fk_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `vp_fk_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE SET NULL;
 
 --
 -- Constraints for table `video_views`
 --
 ALTER TABLE `video_views`
-  ADD CONSTRAINT `video_views_ibfk_1` FOREIGN KEY (`video_id`) REFERENCES `videos` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `video_views_ibfk_2` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `vv_fk_center` FOREIGN KEY (`center_id`) REFERENCES `centers` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `vv_fk_student` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `vv_fk_video` FOREIGN KEY (`video_id`) REFERENCES `videos` (`id`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
